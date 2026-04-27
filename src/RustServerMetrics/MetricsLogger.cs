@@ -258,10 +258,11 @@ namespace RustServerMetrics
         void LogNetworkUpdates()
         {
             if (_networkUpdates.Count < 1) return;
+            var serverTag = Configuration.serverTag;
             var epochNow = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
             _stringBuilder.Clear();
             _stringBuilder.Append("network_updates,server=");
-            _stringBuilder.Append(Configuration.serverTag);
+            _stringBuilder.Append(serverTag);
             _stringBuilder.Append(" ");
 
             var enumerator = _networkUpdates.GetEnumerator();
@@ -324,20 +325,19 @@ namespace RustServerMetrics
                 _firstReportGenerated = true;
                 return;
             }
+            var config = Configuration;
             var current = Performance.current;
             var epochNow = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString();
 
-            LogFrameRate(current, epochNow);
+            LogFrameRate(current, epochNow, config.serverTag);
 
-            if (++_slowMetricsCounter < Configuration.slowMetricsInterval) return;
+            if (++_slowMetricsCounter < config.slowMetricsInterval) return;
             _slowMetricsCounter = 0;
-            LogSlowMetrics(current, epochNow);
+            LogSlowMetrics(current, epochNow, config.serverTag);
         }
 
-        void LogFrameRate(Performance.Tick current, string epochNow)
+        void LogFrameRate(Performance.Tick current, string epochNow, string serverTag)
         {
-            var serverTag = Configuration.serverTag;
-
             _stringBuilder.Clear();
             _stringBuilder.Append("framerate,server=");
             _stringBuilder.Append(serverTag);
@@ -361,10 +361,8 @@ namespace RustServerMetrics
             _reportUploader.AddToSendBuffer(_stringBuilder.ToString());
         }
 
-        void LogSlowMetrics(Performance.Tick current, string epochNow)
+        void LogSlowMetrics(Performance.Tick current, string epochNow, string serverTag)
         {
-            var serverTag = Configuration.serverTag;
-
             _stringBuilder.Clear();
             _stringBuilder.Append("memory,server=");
             _stringBuilder.Append(serverTag);
@@ -435,11 +433,12 @@ namespace RustServerMetrics
 
         public void UploadPacket<T>(string ID, T data, Action<StringBuilder, T> serializer)
         {
+            var serverTag = Configuration.serverTag;
             var epochNow = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
             _stringBuilder.Clear();
             _stringBuilder.Append(ID);
             _stringBuilder.Append(",server=");
-            _stringBuilder.Append(Configuration.serverTag);
+            _stringBuilder.Append(serverTag);
 
             serializer.Invoke(_stringBuilder, data);
 
