@@ -34,27 +34,28 @@ public class MetricsTimeStorage<TKey>
 
     public void SerializeToStringBuilder()
     {
-        if (!MetricsLogger.Instance.Ready) 
+        if (!MetricsLogger.Instance.Ready)
             return;
-        
+
+        var epochNow = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+
         foreach (var item in dict)
         {
-            var epochNow = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString();
             sb.Clear();
-            
+
             sb.Append(_metricKey);
             sb.Append(",server=");
             sb.Append(MetricsLogger.Instance.Configuration.serverTag);
-            
+
             _stringBuilderSerializer.Invoke(sb, item.Key);
-            
+
             sb.Append("\" duration=");
             sb.Append((float)item.Value);
             sb.Append(" ");
             sb.Append(epochNow);
             MetricsLogger.Instance.AddToSendBuffer(sb.ToString());
         }
- 
+
         dict.Clear();
     }
 

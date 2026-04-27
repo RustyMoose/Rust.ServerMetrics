@@ -35,6 +35,7 @@ namespace RustServerMetrics
         }
 
         readonly IReadOnlyDictionary<Message.Type, NetworkUpdateData> _networkUpdates = Enum.GetValues(typeof(Message.Type)).Cast<Message.Type>().Distinct().ToDictionary(x => x, z => new NetworkUpdateData(0, 0));
+        static readonly IReadOnlyDictionary<Message.Type, string> _messageTypeNames = Enum.GetValues(typeof(Message.Type)).Cast<Message.Type>().Distinct().ToDictionary(x => x, x => x.ToString());
 
         public readonly MetricsTimeStorage<MethodInfo> ServerInvokes = new("invoke_execution", LogMethodInfo);
         public readonly MetricsTimeStorage<string> ServerRpcCalls = new("rpc_calls", LogMethodName);
@@ -257,7 +258,7 @@ namespace RustServerMetrics
         void LogNetworkUpdates()
         {
             if (_networkUpdates.Count < 1) return;
-            var epochNow = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString();
+            var epochNow = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
             _stringBuilder.Clear();
             _stringBuilder.Append("network_updates,server=");
             _stringBuilder.Append(Configuration.serverTag);
@@ -267,12 +268,12 @@ namespace RustServerMetrics
             if (enumerator.MoveNext())
             {
                 var networkUpdate = enumerator.Current;
-                var key = networkUpdate.Key.ToString();
+                var key = _messageTypeNames[networkUpdate.Key];
                 var value = networkUpdate.Value;
                 // Count first named {type}
                 _stringBuilder.Append(key);
                 _stringBuilder.Append("=");
-                _stringBuilder.Append(value.count.ToString());
+                _stringBuilder.Append(value.count);
                 _stringBuilder.Append("i");
                 value.count = 0;
 
@@ -281,21 +282,21 @@ namespace RustServerMetrics
                 _stringBuilder.Append(key);
                 _stringBuilder.Append("_bytes");
                 _stringBuilder.Append("=");
-                _stringBuilder.Append(value.bytes.ToString());
+                _stringBuilder.Append(value.bytes);
                 _stringBuilder.Append("i");
                 value.bytes = 0;
 
                 while (enumerator.MoveNext())
                 {
                     networkUpdate = enumerator.Current;
-                    key = networkUpdate.Key.ToString();
+                    key = _messageTypeNames[networkUpdate.Key];
                     value = networkUpdate.Value;
 
                     // Count first named {type}
                     _stringBuilder.Append(",");
                     _stringBuilder.Append(key);
                     _stringBuilder.Append("=");
-                    _stringBuilder.Append(value.count.ToString());
+                    _stringBuilder.Append(value.count);
                     _stringBuilder.Append("i");
                     value.count = 0;
 
@@ -304,7 +305,7 @@ namespace RustServerMetrics
                     _stringBuilder.Append(key);
                     _stringBuilder.Append("_bytes");
                     _stringBuilder.Append("=");
-                    _stringBuilder.Append(value.bytes.ToString());
+                    _stringBuilder.Append(value.bytes);
                     _stringBuilder.Append("i");
                     value.bytes = 0;
                 }
@@ -324,7 +325,7 @@ namespace RustServerMetrics
                 return;
             }
             var current = Performance.current;
-            var epochNow = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString();
+            var epochNow = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
 
             _stringBuilder.Clear();
             _stringBuilder.Append("framerate,server=");
@@ -415,7 +416,7 @@ namespace RustServerMetrics
 
         public void UploadPacket<T>(string ID, T data, Action<StringBuilder, T> serializer)
         {
-            var epochNow = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString();
+            var epochNow = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
             _stringBuilder.Clear();
             _stringBuilder.Append(ID);
             _stringBuilder.Append(",server=");
