@@ -471,13 +471,16 @@ namespace RustServerMetrics
         {
             builder.Append(",behaviour=\"");
 
-            foreach (var cursor in info)
+            int start = 0;
+            int dot = info.IndexOf('.');
+            while (dot >= 0)
             {
-                if (cursor == '.')
-                    builder.Append("\",method=\"");
-                else
-                    builder.Append(cursor);
+                builder.Append(info, start, dot - start);
+                builder.Append("\",method=\"");
+                start = dot + 1;
+                dot = info.IndexOf('.', start);
             }
+            builder.Append(info, start, info.Length - start);
         }
         #endregion
 
