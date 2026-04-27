@@ -46,7 +46,8 @@ namespace RustServerMetrics
             builder.Append(command);
         });
 
-        public bool Ready { get; private set; }
+        public static bool IsReady;
+        public bool Ready { get => IsReady; private set => IsReady = value; }
         internal ConfigData Configuration { get; private set; }
 
         Uri _baseUri;

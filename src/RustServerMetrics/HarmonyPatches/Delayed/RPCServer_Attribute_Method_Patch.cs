@@ -74,7 +74,7 @@ internal class RPCServer_Attribute_Method_Patch
 
     public static void CustomPostfix(string methodName, long __state)
     {
-        if (MetricsLogger.Instance == null)
+        if (!MetricsLogger.IsReady)
         {
             return;
         }

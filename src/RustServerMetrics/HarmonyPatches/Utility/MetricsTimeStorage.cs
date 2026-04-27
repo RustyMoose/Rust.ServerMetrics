@@ -20,7 +20,7 @@ public class MetricsTimeStorage<TKey>
     
     public void LogTime(TKey key, double milliseconds)
     {
-        if (!MetricsLogger.Instance.Ready) 
+        if (!MetricsLogger.IsReady)
             return;
         
         if (!dict.TryGetValue(key, out double currentDuration))
@@ -34,7 +34,7 @@ public class MetricsTimeStorage<TKey>
 
     public void SerializeToStringBuilder()
     {
-        if (!MetricsLogger.Instance.Ready)
+        if (!MetricsLogger.IsReady)
             return;
 
         var epochNow = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();

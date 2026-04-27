@@ -82,6 +82,12 @@ internal static class InvokeHandlerBase_DoTick_Patch
         
     private static void InvokeWrapper(InvokeAction invokeAction)
     {
+        if (!MetricsLogger.IsReady)
+        {
+            invokeAction.action.Invoke();
+            return;
+        }
+
         var start = Stopwatch.GetTimestamp();
         try
         {
@@ -90,7 +96,7 @@ internal static class InvokeHandlerBase_DoTick_Patch
         finally
         {
             var ms = (Stopwatch.GetTimestamp() - start) * TicksToMs;
-            MetricsLogger.Instance?.ServerInvokes.LogTime(invokeAction.action.Method, ms);
+            MetricsLogger.Instance.ServerInvokes.LogTime(invokeAction.action.Method, ms);
         }
     }
         

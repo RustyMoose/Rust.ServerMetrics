@@ -41,7 +41,7 @@ namespace RustServerMetrics.HarmonyPatches.Delayed
         [HarmonyPostfix]
         public static void Postfix(ConsoleSystem.Arg arg, long __state)
         {
-            if (MetricsLogger.Instance == null)
+            if (!MetricsLogger.IsReady)
                 return;
 
             var ms = (Stopwatch.GetTimestamp() - __state) * TicksToMs;

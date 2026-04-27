@@ -72,7 +72,7 @@ internal static class ServerMgr_Metrics_Patches
 
     public static void CustomPostfix(string methodName, long __state)
     {
-        if (MetricsLogger.Instance == null)
+        if (!MetricsLogger.IsReady)
             return;
 
         var ms = (Stopwatch.GetTimestamp() - __state) * TicksToMs;
