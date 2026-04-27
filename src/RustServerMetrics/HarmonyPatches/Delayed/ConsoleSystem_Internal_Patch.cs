@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Reflection;
 using UnityEngine;
+using Stopwatch = System.Diagnostics.Stopwatch;
 
 namespace RustServerMetrics.HarmonyPatches.Delayed
 {
@@ -11,6 +12,8 @@ namespace RustServerMetrics.HarmonyPatches.Delayed
     [HarmonyPatch]
     internal class ConsoleSystem_Internal_Patch
     {
+        private static readonly double TicksToMs = 1000.0 / Stopwatch.Frequency;
+
         [HarmonyPrepare]
         public static bool Prepare()
         {
@@ -30,19 +33,19 @@ namespace RustServerMetrics.HarmonyPatches.Delayed
         }
 
         [HarmonyPrefix]
-        public static void Prefix(ref DateTimeOffset __state)
+        public static void Prefix(ref long __state)
         {
-            __state = DateTimeOffset.UtcNow;
+            __state = Stopwatch.GetTimestamp();
         }
 
         [HarmonyPostfix]
-        public static void Postfix(ConsoleSystem.Arg arg, DateTimeOffset __state)
+        public static void Postfix(ConsoleSystem.Arg arg, long __state)
         {
             if (MetricsLogger.Instance == null)
                 return;
-            
-            var duration = DateTimeOffset.UtcNow - __state;
-            MetricsLogger.Instance.ServerConsoleCommands.LogTime(arg.cmd.FullName, duration.TotalMilliseconds);
+
+            var ms = (Stopwatch.GetTimestamp() - __state) * TicksToMs;
+            MetricsLogger.Instance.ServerConsoleCommands.LogTime(arg.cmd.FullName, ms);
         }
     }
 }
