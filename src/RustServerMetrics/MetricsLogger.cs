@@ -51,7 +51,6 @@ namespace RustServerMetrics
         internal ConfigData Configuration { get; private set; }
 
         Uri _baseUri;
-        internal readonly HashSet<string> _requestedClientPerf = new(1000);
         readonly int _performanceReport_RequestId = UnityEngine.Random.Range(-2147483648, 2147483647);
         ReportUploader _reportUploader;
         Message.Type _lastMessageType;
@@ -155,6 +154,7 @@ namespace RustServerMetrics
             if (_playerStatsActions.TryGetValue(player.userID, out Action action))
                 player.CancelInvoke(action);
             _playerStatsActions.Remove(player.userID);
+            _perfReportDelayCounter.Remove(player.userID);
         }
 
         internal void OnNetWritePacketID(Message.Type messageType)
@@ -219,7 +219,6 @@ namespace RustServerMetrics
                 builder.Append(report.fps);
             });
 
-            _requestedClientPerf.Remove(clientPerformanceReport.user_id);
             return true;
         }
 
