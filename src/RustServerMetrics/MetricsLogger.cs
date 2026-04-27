@@ -32,7 +32,7 @@ namespace RustServerMetrics
             }
         }
 
-        readonly IReadOnlyDictionary<Message.Type, NetworkUpdateData> _networkUpdates = Enum.GetValues(typeof(Message.Type)).Cast<Message.Type>().Distinct().ToDictionary(x => x, z => new NetworkUpdateData(0, 0));
+        readonly Dictionary<Message.Type, NetworkUpdateData> _networkUpdates = Enum.GetValues(typeof(Message.Type)).Cast<Message.Type>().Distinct().ToDictionary(x => x, z => new NetworkUpdateData(0, 0));
         static readonly IReadOnlyDictionary<Message.Type, string> _messageTypeNames = Enum.GetValues(typeof(Message.Type)).Cast<Message.Type>().Distinct().ToDictionary(x => x, x => x.ToString());
 
         public readonly MetricsTimeStorage<MethodInfo> ServerInvokes = new("invoke_execution", LogMethodInfo);
