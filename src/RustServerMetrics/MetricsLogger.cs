@@ -324,7 +324,7 @@ namespace RustServerMetrics
                 return;
             }
             var current = Performance.current;
-            var epochNow = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            var epochNow = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString();
 
             _stringBuilder.Clear();
             _stringBuilder.Append("framerate,server=");
