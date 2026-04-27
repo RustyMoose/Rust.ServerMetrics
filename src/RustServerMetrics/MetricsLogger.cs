@@ -56,6 +56,7 @@ namespace RustServerMetrics
         ReportUploader _reportUploader;
         Message.Type _lastMessageType;
         bool _firstReportGenerated;
+        int _slowMetricsCounter;
 
         public Uri BaseUri
         {
@@ -326,9 +327,20 @@ namespace RustServerMetrics
             var current = Performance.current;
             var epochNow = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString();
 
+            LogFrameRate(current, epochNow);
+
+            if (++_slowMetricsCounter < Configuration.slowMetricsInterval) return;
+            _slowMetricsCounter = 0;
+            LogSlowMetrics(current, epochNow);
+        }
+
+        void LogFrameRate(Performance.Tick current, string epochNow)
+        {
+            var serverTag = Configuration.serverTag;
+
             _stringBuilder.Clear();
             _stringBuilder.Append("framerate,server=");
-            _stringBuilder.Append(Configuration.serverTag);
+            _stringBuilder.Append(serverTag);
             _stringBuilder.Append(" instant=");
             _stringBuilder.Append(current.frameRate);
             _stringBuilder.Append(",average=");
@@ -338,17 +350,24 @@ namespace RustServerMetrics
             _stringBuilder.Append("\n");
 
             _stringBuilder.Append("frametime,server=");
-            _stringBuilder.Append(Configuration.serverTag);
+            _stringBuilder.Append(serverTag);
             _stringBuilder.Append(" instant=");
             _stringBuilder.Append(current.frameTime);
             _stringBuilder.Append(",average=");
             _stringBuilder.Append(current.frameTimeAverage);
             _stringBuilder.Append(" ");
             _stringBuilder.Append(epochNow);
-            _stringBuilder.Append("\n");
 
+            _reportUploader.AddToSendBuffer(_stringBuilder.ToString());
+        }
+
+        void LogSlowMetrics(Performance.Tick current, string epochNow)
+        {
+            var serverTag = Configuration.serverTag;
+
+            _stringBuilder.Clear();
             _stringBuilder.Append("memory,server=");
-            _stringBuilder.Append(Configuration.serverTag);
+            _stringBuilder.Append(serverTag);
             _stringBuilder.Append(" used=");
             _stringBuilder.Append(current.memoryUsageSystem);
             _stringBuilder.Append("i,collections=");
@@ -362,7 +381,7 @@ namespace RustServerMetrics
             _stringBuilder.Append("\n");
 
             _stringBuilder.Append("tasks,server=");
-            _stringBuilder.Append(Configuration.serverTag);
+            _stringBuilder.Append(serverTag);
             _stringBuilder.Append(" load_balancer=");
             _stringBuilder.Append(current.loadBalancerTasks);
             _stringBuilder.Append("i,invoke_handler=");
@@ -378,7 +397,7 @@ namespace RustServerMetrics
             var packetLossLastSecond = Net.sv.GetStat(null, BaseNetwork.StatTypeLong.PacketLossLastSecond);
 
             _stringBuilder.Append("network,server=");
-            _stringBuilder.Append(Configuration.serverTag);
+            _stringBuilder.Append(serverTag);
             _stringBuilder.Append(" bytes_received=");
             _stringBuilder.Append(bytesReceivedLastSecond);
             _stringBuilder.Append("i,bytes_sent=");
@@ -390,7 +409,7 @@ namespace RustServerMetrics
             _stringBuilder.Append("\n");
 
             _stringBuilder.Append("players,server=");
-            _stringBuilder.Append(Configuration.serverTag);
+            _stringBuilder.Append(serverTag);
             _stringBuilder.Append(" count=");
             _stringBuilder.Append(BasePlayer.activePlayerList.Count);
             _stringBuilder.Append("i,joining=");
@@ -402,11 +421,12 @@ namespace RustServerMetrics
             _stringBuilder.Append("\n");
 
             _stringBuilder.Append("entities,server=");
-            _stringBuilder.Append(Configuration.serverTag);
+            _stringBuilder.Append(serverTag);
             _stringBuilder.Append(" count=");
             _stringBuilder.Append(BaseNetworkable.serverEntities.Count);
             _stringBuilder.Append("i ");
             _stringBuilder.Append(epochNow);
+
             _reportUploader.AddToSendBuffer(_stringBuilder.ToString());
         }
 

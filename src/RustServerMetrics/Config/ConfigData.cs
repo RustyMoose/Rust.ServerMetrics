@@ -36,5 +36,8 @@ namespace RustServerMetrics.Config
 
         [JsonProperty(PropertyName = "Gather Player Averages (Client FPS, Client Latency, Player FPS, Player Memory, Player Latency, Player Packet Loss)")]
         public bool gatherPlayerMetrics = true;
+
+        [JsonProperty(PropertyName = "Slow Metrics Interval")]
+        public int slowMetricsInterval = 12;
     }
 }
