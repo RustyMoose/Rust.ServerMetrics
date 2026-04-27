@@ -56,6 +56,7 @@ namespace RustServerMetrics
         Message.Type _lastMessageType;
         bool _firstReportGenerated;
         int _slowMetricsCounter;
+        System.Diagnostics.Process _currentProcess;
 
         public Uri BaseUri
         {
@@ -366,7 +367,7 @@ namespace RustServerMetrics
             _stringBuilder.Append("memory,server=");
             _stringBuilder.Append(serverTag);
             _stringBuilder.Append(" used=");
-            _stringBuilder.Append(current.memoryUsageSystem);
+            _stringBuilder.Append(GetMemoryUsage(current));
             _stringBuilder.Append("i,collections=");
             _stringBuilder.Append(current.memoryCollections);
             _stringBuilder.Append("i,allocations=");
@@ -448,6 +449,18 @@ namespace RustServerMetrics
         }
 
         public void AddToSendBuffer(string toString) => _reportUploader.AddToSendBuffer(toString);
+
+        long GetMemoryUsage(Performance.Tick performanceTick)
+        {
+            if (performanceTick.memoryUsageSystem > 0)
+                return performanceTick.memoryUsageSystem;
+
+            if (_currentProcess == null)
+                _currentProcess = System.Diagnostics.Process.GetCurrentProcess();
+
+            _currentProcess.Refresh();
+            return _currentProcess.WorkingSet64 / 1024 / 1024;
+        }
 
         private static void AppendPluginNameSanitized(StringBuilder builder, string name)
         {
