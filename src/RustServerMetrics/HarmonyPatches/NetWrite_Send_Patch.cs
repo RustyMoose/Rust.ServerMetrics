@@ -9,7 +9,8 @@ namespace RustServerMetrics.HarmonyPatches
         [HarmonyPrefix]
         public static void Prefix(NetWrite __instance, SendInfo info)
         {
-            SingletonComponent<MetricsLogger>.Instance?.OnNetWriteSend(__instance, info);
+            if (!MetricsLogger.IsReady) return;
+            SingletonComponent<MetricsLogger>.Instance.OnNetWriteSend(__instance, info);
         }
     }
 }

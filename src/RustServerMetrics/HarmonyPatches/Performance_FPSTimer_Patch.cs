@@ -8,6 +8,7 @@ namespace RustServerMetrics.HarmonyPatches
         [HarmonyPostfix]
         public static void Postfix()
         {
+            if (!MetricsLogger.IsReady) return;
             MetricsLogger.Instance.OnPerformanceReportGenerated();
         }
     }
