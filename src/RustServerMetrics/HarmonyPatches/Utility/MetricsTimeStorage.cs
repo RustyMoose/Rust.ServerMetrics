@@ -1,35 +1,27 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Text;
-using UnityEngine;
 
 namespace RustServerMetrics.HarmonyPatches.Utility;
 
-public class MetricsTimeStorage<TKey>
+public class MetricsTimeStorage<TKey>(string metricKey, Action<StringBuilder, TKey> stringBuilderSerializer)
 {
-    private readonly string _metricKey;
-    private readonly Action<StringBuilder, TKey> _stringBuilderSerializer;
-    private Dictionary<TKey, double> dict = new ();
-    private readonly StringBuilder sb = new();
+    private readonly Dictionary<TKey, double> _dict = new ();
     
-    public MetricsTimeStorage(string metricKey, Action<StringBuilder, TKey> stringBuilderSerializer)
-    {
-        _metricKey = metricKey;
-        _stringBuilderSerializer = stringBuilderSerializer;
-    }
-    
+    private readonly StringBuilder _sb = new();
+
     public void LogTime(TKey key, double milliseconds)
     {
         if (!MetricsLogger.IsReady)
             return;
         
-        if (!dict.TryGetValue(key, out double currentDuration))
+        if (!_dict.TryGetValue(key, out var currentDuration))
         {
-            dict.Add(key, milliseconds);
+            _dict.Add(key, milliseconds);
             return;
         }
         
-        dict[key] = currentDuration + milliseconds;        
+        _dict[key] = currentDuration + milliseconds;        
     }
 
     public void SerializeToStringBuilder()
@@ -38,28 +30,26 @@ public class MetricsTimeStorage<TKey>
             return;
 
         var instance = MetricsLogger.Instance;
-        var serverTag = instance.Configuration.serverTag;
+        var serverTag = instance.Configuration.ServerTag;
         var epochNow = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
 
-        foreach (var item in dict)
+        foreach (var item in _dict)
         {
-            sb.Clear();
+            _sb.Clear();
 
-            sb.Append(_metricKey);
-            sb.Append(",server=");
-            sb.Append(serverTag);
+            _sb.Append(metricKey);
+            _sb.Append(",server=");
+            _sb.Append(serverTag);
 
-            _stringBuilderSerializer.Invoke(sb, item.Key);
+            stringBuilderSerializer.Invoke(_sb, item.Key);
 
-            sb.Append("\" duration=");
-            sb.Append((float)item.Value);
-            sb.Append(" ");
-            sb.Append(epochNow);
-            instance.AddToSendBuffer(sb.ToString());
+            _sb.Append("\" duration=");
+            _sb.Append((float)item.Value);
+            _sb.Append(" ");
+            _sb.Append(epochNow);
+            instance.AddToSendBuffer(_sb.ToString());
         }
 
-        dict.Clear();
+        _dict.Clear();
     }
-
-
 }

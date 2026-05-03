@@ -1,43 +1,50 @@
 ﻿using Newtonsoft.Json;
 
-namespace RustServerMetrics.Config
+namespace RustServerMetrics.Config;
+
+class ConfigData
 {
-    class ConfigData
-    {
-        public const string DEFAULT_INFLUX_DB_URL = "http://exampledb.com";
-        public const string DEFAULT_INFLUX_DB_NAME = "CHANGEME_rust_server_example";
-        public const string DEFAULT_INFLUX_DB_USER = "admin";
-        public const string DEFAULT_INFLUX_DB_PASSWORD = "adminadmin";
-        public const string DEFAULT_SERVER_TAG = "CHANGEME-01";
+    #region Defaults
+    
+    public const string DefaultInfluxDbUrl = "http://exampledb.com";
+    
+    public const string DefaultInfluxDBName = "CHANGEME_rust_server_example";
+    
+    public const string DefaultInfluxDBUser = "admin";
+    
+    public const string DefaultInfluxDBPassword = "adminadmin";
+    
+    public const string DefaultServerTag = "CHANGEME-01";
+    
+    #endregion
 
-        [JsonProperty(PropertyName = "Enabled")]
-        public bool enabled = false;
+    [JsonProperty(PropertyName = "Enabled")]
+    public bool Enabled;
 
-        [JsonProperty(PropertyName = "Influx Database Url")]
-        public string databaseUrl = DEFAULT_INFLUX_DB_URL;
+    [JsonProperty(PropertyName = "Influx Database Url")]
+    public string DatabaseUrl = DefaultInfluxDbUrl;
 
-        [JsonProperty(PropertyName = "Influx Database Name")]
-        public string databaseName = DEFAULT_INFLUX_DB_NAME;
+    [JsonProperty(PropertyName = "Influx Database Name")]
+    public string DatabaseName = DefaultInfluxDBName;
 
-        [JsonProperty(PropertyName = "Influx Database User")]
-        public string databaseUser = DEFAULT_INFLUX_DB_USER;
+    [JsonProperty(PropertyName = "Influx Database User")]
+    public string DatabaseUser = DefaultInfluxDBUser;
 
-        [JsonProperty(PropertyName = "Influx Database Password")]
-        public string databasePassword = DEFAULT_INFLUX_DB_PASSWORD;
+    [JsonProperty(PropertyName = "Influx Database Password")]
+    public string DatabasePassword = DefaultInfluxDBPassword;
 
-        [JsonProperty(PropertyName = "Server Tag")]
-        public string serverTag = DEFAULT_SERVER_TAG;
+    [JsonProperty(PropertyName = "Server Tag")]
+    public string ServerTag = DefaultServerTag;
 
-        [JsonProperty(PropertyName = "Debug Logging")]
-        public bool debugLogging = false;
+    [JsonProperty(PropertyName = "Debug Logging")]
+    public bool DebugLogging;
 
-        [JsonProperty(PropertyName = "Amount of metrics to submit in each request")]
-        public ushort batchSize = 1000;
+    [JsonProperty(PropertyName = "Amount of metrics to submit in each request")]
+    public ushort BatchSize = 1000;
 
-        [JsonProperty(PropertyName = "Gather Player Averages (Client FPS, Client Latency, Player FPS, Player Memory, Player Latency, Player Packet Loss)")]
-        public bool gatherPlayerMetrics = true;
+    [JsonProperty(PropertyName = "Gather Player Averages (Client FPS, Client Latency, Player FPS, Player Memory, Player Latency, Player Packet Loss)")]
+    public bool GatherPlayerMetrics = true;
 
-        [JsonProperty(PropertyName = "Slow Metrics Interval")]
-        public int slowMetricsInterval = 12;
-    }
+    [JsonProperty(PropertyName = "Slow Metrics Interval")]
+    public int SlowMetricsInterval = 12;
 }
