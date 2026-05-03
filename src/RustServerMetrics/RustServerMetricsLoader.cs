@@ -25,12 +25,14 @@ public class RustServerMetricsLoader : IHarmonyModHooks
 
     public void OnUnloaded(OnHarmonyModUnloadedArgs args)
     {
+        MetricsLogger.IsReady = false;
+
         __harmonyInstance?.UnpatchAll();
         foreach (var instance in __modTimeWarningsHarmonyInstances)
         {
             instance?.UnpatchAll();
         }
-        
+
         if (MetricsLogger.Instance != null)
             Object.DestroyImmediate(MetricsLogger.Instance);
     }

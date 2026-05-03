@@ -9,7 +9,6 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Text;
-using System.Text.RegularExpressions;
 using UnityEngine;
 
 namespace RustServerMetrics
@@ -17,7 +16,6 @@ namespace RustServerMetrics
     public class MetricsLogger : SingletonComponent<MetricsLogger>
     {
         const string CONFIGURATION_PATH = "HarmonyMods_Data/ServerMetrics/Configuration.json";
-        readonly static Regex PLUGIN_NAME_REGEX = new Regex(@"_|[^\w\d]");
         readonly StringBuilder _stringBuilder = new();
         readonly Dictionary<ulong, Action> _playerStatsActions = new();
         readonly Dictionary<ulong, uint> _perfReportDelayCounter = new();
@@ -34,7 +32,8 @@ namespace RustServerMetrics
             }
         }
 
-        readonly IReadOnlyDictionary<Message.Type, NetworkUpdateData> _networkUpdates = Enum.GetValues(typeof(Message.Type)).Cast<Message.Type>().Distinct().ToDictionary(x => x, z => new NetworkUpdateData(0, 0));
+        readonly Dictionary<Message.Type, NetworkUpdateData> _networkUpdates = Enum.GetValues(typeof(Message.Type)).Cast<Message.Type>().Distinct().ToDictionary(x => x, z => new NetworkUpdateData(0, 0));
+        static readonly IReadOnlyDictionary<Message.Type, string> _messageTypeNames = Enum.GetValues(typeof(Message.Type)).Cast<Message.Type>().Distinct().ToDictionary(x => x, x => x.ToString());
 
         public readonly MetricsTimeStorage<MethodInfo> ServerInvokes = new("invoke_execution", LogMethodInfo);
         public readonly MetricsTimeStorage<string> ServerRpcCalls = new("rpc_calls", LogMethodName);
@@ -47,15 +46,17 @@ namespace RustServerMetrics
             builder.Append(command);
         });
 
-        public bool Ready { get; private set; }
+        public static bool IsReady;
+        public bool Ready { get => IsReady; private set => IsReady = value; }
         internal ConfigData Configuration { get; private set; }
 
         Uri _baseUri;
-        internal readonly HashSet<string> _requestedClientPerf = new(1000);
         readonly int _performanceReport_RequestId = UnityEngine.Random.Range(-2147483648, 2147483647);
         ReportUploader _reportUploader;
         Message.Type _lastMessageType;
         bool _firstReportGenerated;
+        int _slowMetricsCounter;
+        System.Diagnostics.Process _currentProcess;
 
         public Uri BaseUri
         {
@@ -154,6 +155,7 @@ namespace RustServerMetrics
             if (_playerStatsActions.TryGetValue(player.userID, out Action action))
                 player.CancelInvoke(action);
             _playerStatsActions.Remove(player.userID);
+            _perfReportDelayCounter.Remove(player.userID);
         }
 
         internal void OnNetWritePacketID(Message.Type messageType)
@@ -197,7 +199,7 @@ namespace RustServerMetrics
                 UploadPacket("oxide_plugins", metric, (builder, report) =>
                 {
                     builder.Append(",plugin=\"");
-                    builder.Append(PLUGIN_NAME_REGEX.Replace(report.Key, string.Empty));
+                    AppendPluginNameSanitized(builder, report.Key);
                     builder.Append("\" hookTime=");
                     builder.Append(report.Value);
                 });
@@ -218,7 +220,6 @@ namespace RustServerMetrics
                 builder.Append(report.fps);
             });
 
-            _requestedClientPerf.Remove(clientPerformanceReport.user_id);
             return true;
         }
 
@@ -257,22 +258,23 @@ namespace RustServerMetrics
         void LogNetworkUpdates()
         {
             if (_networkUpdates.Count < 1) return;
-            var epochNow = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString();
+            var serverTag = Configuration.serverTag;
+            var epochNow = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
             _stringBuilder.Clear();
             _stringBuilder.Append("network_updates,server=");
-            _stringBuilder.Append(Configuration.serverTag);
+            _stringBuilder.Append(serverTag);
             _stringBuilder.Append(" ");
 
             var enumerator = _networkUpdates.GetEnumerator();
             if (enumerator.MoveNext())
             {
                 var networkUpdate = enumerator.Current;
-                var key = networkUpdate.Key.ToString();
+                var key = _messageTypeNames[networkUpdate.Key];
                 var value = networkUpdate.Value;
                 // Count first named {type}
                 _stringBuilder.Append(key);
                 _stringBuilder.Append("=");
-                _stringBuilder.Append(value.count.ToString());
+                _stringBuilder.Append(value.count);
                 _stringBuilder.Append("i");
                 value.count = 0;
 
@@ -281,21 +283,21 @@ namespace RustServerMetrics
                 _stringBuilder.Append(key);
                 _stringBuilder.Append("_bytes");
                 _stringBuilder.Append("=");
-                _stringBuilder.Append(value.bytes.ToString());
+                _stringBuilder.Append(value.bytes);
                 _stringBuilder.Append("i");
                 value.bytes = 0;
 
                 while (enumerator.MoveNext())
                 {
                     networkUpdate = enumerator.Current;
-                    key = networkUpdate.Key.ToString();
+                    key = _messageTypeNames[networkUpdate.Key];
                     value = networkUpdate.Value;
 
                     // Count first named {type}
                     _stringBuilder.Append(",");
                     _stringBuilder.Append(key);
                     _stringBuilder.Append("=");
-                    _stringBuilder.Append(value.count.ToString());
+                    _stringBuilder.Append(value.count);
                     _stringBuilder.Append("i");
                     value.count = 0;
 
@@ -304,7 +306,7 @@ namespace RustServerMetrics
                     _stringBuilder.Append(key);
                     _stringBuilder.Append("_bytes");
                     _stringBuilder.Append("=");
-                    _stringBuilder.Append(value.bytes.ToString());
+                    _stringBuilder.Append(value.bytes);
                     _stringBuilder.Append("i");
                     value.bytes = 0;
                 }
@@ -323,12 +325,22 @@ namespace RustServerMetrics
                 _firstReportGenerated = true;
                 return;
             }
+            var config = Configuration;
             var current = Performance.current;
             var epochNow = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString();
 
+            LogFrameRate(current, epochNow, config.serverTag);
+
+            if (++_slowMetricsCounter < config.slowMetricsInterval) return;
+            _slowMetricsCounter = 0;
+            LogSlowMetrics(current, epochNow, config.serverTag);
+        }
+
+        void LogFrameRate(Performance.Tick current, string epochNow, string serverTag)
+        {
             _stringBuilder.Clear();
             _stringBuilder.Append("framerate,server=");
-            _stringBuilder.Append(Configuration.serverTag);
+            _stringBuilder.Append(serverTag);
             _stringBuilder.Append(" instant=");
             _stringBuilder.Append(current.frameRate);
             _stringBuilder.Append(",average=");
@@ -338,19 +350,24 @@ namespace RustServerMetrics
             _stringBuilder.Append("\n");
 
             _stringBuilder.Append("frametime,server=");
-            _stringBuilder.Append(Configuration.serverTag);
+            _stringBuilder.Append(serverTag);
             _stringBuilder.Append(" instant=");
             _stringBuilder.Append(current.frameTime);
             _stringBuilder.Append(",average=");
             _stringBuilder.Append(current.frameTimeAverage);
             _stringBuilder.Append(" ");
             _stringBuilder.Append(epochNow);
-            _stringBuilder.Append("\n");
 
+            _reportUploader.AddToSendBuffer(_stringBuilder.ToString());
+        }
+
+        void LogSlowMetrics(Performance.Tick current, string epochNow, string serverTag)
+        {
+            _stringBuilder.Clear();
             _stringBuilder.Append("memory,server=");
-            _stringBuilder.Append(Configuration.serverTag);
+            _stringBuilder.Append(serverTag);
             _stringBuilder.Append(" used=");
-            _stringBuilder.Append(current.memoryUsageSystem);
+            _stringBuilder.Append(GetMemoryUsage(current));
             _stringBuilder.Append("i,collections=");
             _stringBuilder.Append(current.memoryCollections);
             _stringBuilder.Append("i,allocations=");
@@ -362,7 +379,7 @@ namespace RustServerMetrics
             _stringBuilder.Append("\n");
 
             _stringBuilder.Append("tasks,server=");
-            _stringBuilder.Append(Configuration.serverTag);
+            _stringBuilder.Append(serverTag);
             _stringBuilder.Append(" load_balancer=");
             _stringBuilder.Append(current.loadBalancerTasks);
             _stringBuilder.Append("i,invoke_handler=");
@@ -378,7 +395,7 @@ namespace RustServerMetrics
             var packetLossLastSecond = Net.sv.GetStat(null, BaseNetwork.StatTypeLong.PacketLossLastSecond);
 
             _stringBuilder.Append("network,server=");
-            _stringBuilder.Append(Configuration.serverTag);
+            _stringBuilder.Append(serverTag);
             _stringBuilder.Append(" bytes_received=");
             _stringBuilder.Append(bytesReceivedLastSecond);
             _stringBuilder.Append("i,bytes_sent=");
@@ -390,7 +407,7 @@ namespace RustServerMetrics
             _stringBuilder.Append("\n");
 
             _stringBuilder.Append("players,server=");
-            _stringBuilder.Append(Configuration.serverTag);
+            _stringBuilder.Append(serverTag);
             _stringBuilder.Append(" count=");
             _stringBuilder.Append(BasePlayer.activePlayerList.Count);
             _stringBuilder.Append("i,joining=");
@@ -402,11 +419,12 @@ namespace RustServerMetrics
             _stringBuilder.Append("\n");
 
             _stringBuilder.Append("entities,server=");
-            _stringBuilder.Append(Configuration.serverTag);
+            _stringBuilder.Append(serverTag);
             _stringBuilder.Append(" count=");
             _stringBuilder.Append(BaseNetworkable.serverEntities.Count);
             _stringBuilder.Append("i ");
             _stringBuilder.Append(epochNow);
+
             _reportUploader.AddToSendBuffer(_stringBuilder.ToString());
         }
 
@@ -415,11 +433,12 @@ namespace RustServerMetrics
 
         public void UploadPacket<T>(string ID, T data, Action<StringBuilder, T> serializer)
         {
-            var epochNow = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString();
+            var serverTag = Configuration.serverTag;
+            var epochNow = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
             _stringBuilder.Clear();
             _stringBuilder.Append(ID);
             _stringBuilder.Append(",server=");
-            _stringBuilder.Append(Configuration.serverTag);
+            _stringBuilder.Append(serverTag);
 
             serializer.Invoke(_stringBuilder, data);
 
@@ -430,6 +449,27 @@ namespace RustServerMetrics
         }
 
         public void AddToSendBuffer(string toString) => _reportUploader.AddToSendBuffer(toString);
+
+        long GetMemoryUsage(Performance.Tick performanceTick)
+        {
+            if (performanceTick.memoryUsageSystem > 0)
+                return performanceTick.memoryUsageSystem;
+
+            if (_currentProcess == null)
+                _currentProcess = System.Diagnostics.Process.GetCurrentProcess();
+
+            _currentProcess.Refresh();
+            return _currentProcess.WorkingSet64 / 1024 / 1024;
+        }
+
+        private static void AppendPluginNameSanitized(StringBuilder builder, string name)
+        {
+            foreach (var c in name)
+            {
+                if (char.IsLetterOrDigit(c))
+                    builder.Append(c);
+            }
+        }
 
         private static void LogMethodInfo(StringBuilder builder, MethodInfo info)
         {
@@ -443,13 +483,16 @@ namespace RustServerMetrics
         {
             builder.Append(",behaviour=\"");
 
-            foreach (var cursor in info)
+            int start = 0;
+            int dot = info.IndexOf('.');
+            while (dot >= 0)
             {
-                if (cursor == '.')
-                    builder.Append("\",method=\"");
-                else
-                    builder.Append(cursor);
+                builder.Append(info, start, dot - start);
+                builder.Append("\",method=\"");
+                start = dot + 1;
+                dot = info.IndexOf('.', start);
             }
+            builder.Append(info, start, info.Length - start);
         }
         #endregion
 
