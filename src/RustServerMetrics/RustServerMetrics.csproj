@@ -15,7 +15,7 @@
 		<GamePlatform Condition=" '$(Configuration)' == 'Windows' ">windows</GamePlatform>
 		<GamePlatform Condition=" '$(GamePlatform)' == '' ">linux</GamePlatform>
 
-		<AssemblySearchPaths>..\..\deps\$(GamePlatform);$(AssemblySearchPaths)</AssemblySearchPaths>
+		<AssemblySearchPaths>..\..\dependencies\rust;$(AssemblySearchPaths)</AssemblySearchPaths>
 
 		<LangVersion>10</LangVersion>
 
