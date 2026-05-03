@@ -20,7 +20,7 @@ public class MetricsTimeStorage<TKey>
     
     public void LogTime(TKey key, double milliseconds)
     {
-        if (!MetricsLogger.Instance.Ready) 
+        if (!MetricsLogger.IsReady)
             return;
         
         if (!dict.TryGetValue(key, out double currentDuration))
@@ -34,27 +34,30 @@ public class MetricsTimeStorage<TKey>
 
     public void SerializeToStringBuilder()
     {
-        if (!MetricsLogger.Instance.Ready) 
+        if (!MetricsLogger.IsReady)
             return;
-        
+
+        var instance = MetricsLogger.Instance;
+        var serverTag = instance.Configuration.serverTag;
+        var epochNow = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+
         foreach (var item in dict)
         {
-            var epochNow = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString();
             sb.Clear();
-            
+
             sb.Append(_metricKey);
             sb.Append(",server=");
-            sb.Append(MetricsLogger.Instance.Configuration.serverTag);
-            
+            sb.Append(serverTag);
+
             _stringBuilderSerializer.Invoke(sb, item.Key);
-            
+
             sb.Append("\" duration=");
             sb.Append((float)item.Value);
             sb.Append(" ");
             sb.Append(epochNow);
-            MetricsLogger.Instance.AddToSendBuffer(sb.ToString());
+            instance.AddToSendBuffer(sb.ToString());
         }
- 
+
         dict.Clear();
     }
 

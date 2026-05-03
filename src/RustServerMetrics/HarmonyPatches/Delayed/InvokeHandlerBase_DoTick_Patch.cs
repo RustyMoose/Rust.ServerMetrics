@@ -17,7 +17,7 @@ internal static class InvokeHandlerBase_DoTick_Patch
 {
     #region Members
 
-    private static readonly Stopwatch Stopwatch = new();
+    private static readonly double TicksToMs = 1000.0 / Stopwatch.Frequency;
 
     private static readonly CodeMatch[] NeedleSequenceToFind =
     {
@@ -82,15 +82,21 @@ internal static class InvokeHandlerBase_DoTick_Patch
         
     private static void InvokeWrapper(InvokeAction invokeAction)
     {
+        if (!MetricsLogger.IsReady)
+        {
+            invokeAction.action.Invoke();
+            return;
+        }
+
+        var start = Stopwatch.GetTimestamp();
         try
         {
-            Stopwatch.Restart();
             invokeAction.action.Invoke();
         }
         finally
         {
-            Stopwatch.Stop();
-            MetricsLogger.Instance?.ServerInvokes.LogTime(invokeAction.action.Method, Stopwatch.Elapsed.TotalMilliseconds);
+            var ms = (Stopwatch.GetTimestamp() - start) * TicksToMs;
+            MetricsLogger.Instance.ServerInvokes.LogTime(invokeAction.action.Method, ms);
         }
     }
         

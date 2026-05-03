@@ -6,6 +6,7 @@ using System.Linq;
 using System.Reflection;
 using System.Reflection.Emit;
 using UnityEngine;
+using Stopwatch = System.Diagnostics.Stopwatch;
 
 namespace RustServerMetrics.HarmonyPatches.Delayed;
 
@@ -13,6 +14,8 @@ namespace RustServerMetrics.HarmonyPatches.Delayed;
 [HarmonyPatch]
 internal class RPCServer_Attribute_Method_Patch
 {
+    private static readonly double TicksToMs = 1000.0 / Stopwatch.Frequency;
+
     [HarmonyPrepare]
     public static bool Prepare()
     {
@@ -53,30 +56,30 @@ internal class RPCServer_Attribute_Method_Patch
     public static IEnumerable<CodeInstruction> Transpile(IEnumerable<CodeInstruction> originalInstructions, MethodBase methodBase, ILGenerator ilGenerator)
     {
         var ret = originalInstructions.ToList();
-        var local = ilGenerator.DeclareLocal(typeof(DateTime));
-            
+        var local = ilGenerator.DeclareLocal(typeof(long));
+
         ret.InsertRange(0, new CodeInstruction []
-        { 
-            new (OpCodes.Call, AccessTools.Property(typeof(DateTime), nameof(DateTime.UtcNow)).GetMethod),
+        {
+            new (OpCodes.Call, AccessTools.Method(typeof(Stopwatch), nameof(Stopwatch.GetTimestamp))),
             new (OpCodes.Stloc, local)
         });
 
         return Helpers.Postfix(
             ret,
-            CustomPostfix, 
+            CustomPostfix,
             new CodeInstruction(OpCodes.Ldstr, $"{methodBase.DeclaringType?.Name}.{methodBase.Name}"),
             new CodeInstruction(OpCodes.Ldloc, local));
     }
-         
 
-    public static void CustomPostfix(string methodName, DateTime __state)
+
+    public static void CustomPostfix(string methodName, long __state)
     {
-        if (MetricsLogger.Instance == null)
+        if (!MetricsLogger.IsReady)
         {
             return;
         }
-            
-        var duration = DateTime.UtcNow - __state;
-        MetricsLogger.Instance.ServerRpcCalls.LogTime(methodName, duration.TotalMilliseconds);
+
+        var ms = (Stopwatch.GetTimestamp() - __state) * TicksToMs;
+        MetricsLogger.Instance.ServerRpcCalls.LogTime(methodName, ms);
     }
 }

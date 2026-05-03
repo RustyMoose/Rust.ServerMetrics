@@ -14,7 +14,7 @@ namespace RustServerMetrics
         readonly Action _notifySubsequentNetworkFailuresAction;
         readonly Action _notifySubsequentHttpFailuresAction;
 
-        readonly List<string> _sendBuffer = new List<string>(_sendBufferCapacity);
+        readonly Queue<string> _sendBuffer = new Queue<string>(_sendBufferCapacity);
         readonly StringBuilder _payloadBuilder = new StringBuilder();
 
         bool _isRunning = false;
@@ -62,9 +62,9 @@ namespace RustServerMetrics
         public void AddToSendBuffer(string payload)
         {
             if (_sendBuffer.Count == _sendBufferCapacity)
-                _sendBuffer.RemoveAt(0);
+                _sendBuffer.Dequeue();
 
-            _sendBuffer.Add(payload);
+            _sendBuffer.Enqueue(payload);
 
             if (!_isRunning)
                 StartCoroutine(SendBufferLoop());
@@ -80,10 +80,9 @@ namespace RustServerMetrics
                 int amountToTake = Mathf.Min(_sendBuffer.Count, BatchSize);
                 for (int i = 0; i < amountToTake; i++)
                 {
-                    _payloadBuilder.Append(_sendBuffer[i]);
+                    _payloadBuilder.Append(_sendBuffer.Dequeue());
                     _payloadBuilder.Append("\n");
                 }
-                _sendBuffer.RemoveRange(0, amountToTake);
                 _attempt = 0;
 
                 // more GC friendly GetBytes implementation
