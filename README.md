@@ -1,6 +1,3 @@
-# THIS REPOSITORY HAS BEEN DISCONTINUED, SEE RECOMENDED FORK BELOW
-Jexs from RustyMoose has volunteered to continue developing and supporting this OSS, see their repository here: [https://github.com/RustyMoose/Rust.ServerMetrics](https://github.com/RustyMoose/Rust.ServerMetrics)
-
 # Rust Server Metrics
 A metrics gathering HarmonyMod for [Rust](https://playrust.com) game servers.
 
