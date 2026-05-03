@@ -5,169 +5,168 @@ using System.Collections.Generic;
 using System.Reflection;
 using System.Reflection.Emit;
 
-namespace RustServerMetrics.HarmonyPatches
+// ReSharper disable InconsistentNaming
+
+namespace RustServerMetrics.HarmonyPatches;
+
+[HarmonyPatch]
+public static class OxideMod_OnFrame_Patch
 {
-    [HarmonyPatch]
-    public static class OxideMod_OnFrame_Patch
+    private const string OxideCore_AssemblyName = "Oxide.Core";
+
+    private const string OxidePluginType_FullName = "Oxide.Core.Plugins.Plugin";
+    private const string OxideInterfaceType_FullName = "Oxide.Core.Interface";
+    private const string OxideOxideModType_FullName = "Oxide.Core.OxideMod";
+    private const string OxidePluginManagerType_FullName = "Oxide.Core.Plugins.PluginManager";
+
+    private static Assembly _oxideCoreAssembly;
+    public static float nextTick = 0f;
+
+    [HarmonyPrepare]
+    public static bool Prepare()
     {
-        const string OxideCore_AssemblyName = "Oxide.Core";
-
-        const string OxidePluginType_FullName = "Oxide.Core.Plugins.Plugin";
-        const string OxideInterfaceType_FullName = "Oxide.Core.Interface";
-        const string OxideOxideModType_FullName = "Oxide.Core.OxideMod";
-        const string OxidePluginManagerType_FullName = "Oxide.Core.Plugins.PluginManager";
-
-        static Assembly _oxideCoreAssembly = null;
-        public static float nextTick = 0f;
-
-        [HarmonyPrepare]
-        public static bool Prepare()
+        var assemblies = AppDomain.CurrentDomain.GetAssemblies();
+        foreach (var assembly in assemblies)
         {
-            var assemblies = AppDomain.CurrentDomain.GetAssemblies();
-            foreach (var assembly in assemblies)
+            if (!string.Equals(assembly.GetName().Name, OxideCore_AssemblyName, StringComparison.OrdinalIgnoreCase))
             {
-                if (!string.Equals(assembly.GetName().Name, OxideCore_AssemblyName, StringComparison.OrdinalIgnoreCase))
-                {
-                    continue;
-                }
-                
-                _oxideCoreAssembly = assembly;
-                
-                break;
+                continue;
             }
-
-            if (_oxideCoreAssembly == null)
-            {
-                return false;
-            }
-
-            return true;
+                
+            _oxideCoreAssembly = assembly;
+                
+            break;
         }
+
+        return _oxideCoreAssembly != null;
+    }
         
-        [HarmonyTargetMethods]
-        public static IEnumerable<MethodBase> TargetMethods(Harmony harmonyInstance)
+    [HarmonyTargetMethods]
+    public static IEnumerable<MethodBase> TargetMethods(Harmony harmonyInstance)
+    {
+        foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
         {
-            var assemblies = AppDomain.CurrentDomain.GetAssemblies();
-            for (int i = 0; i < assemblies.Length; i++)
-            {
-                var assembly = assemblies[i];
-                if (!string.Equals(assembly.GetName().Name, OxideCore_AssemblyName, StringComparison.OrdinalIgnoreCase)) continue;
-                _oxideCoreAssembly = assembly;
-                break;
-            }
-
-            if (_oxideCoreAssembly == null)
-                return Array.Empty<MethodBase>();
-
-            var oxideModType = _oxideCoreAssembly.GetType(OxideOxideModType_FullName, false);
-
-            if (oxideModType == null)
-                return Array.Empty<MethodBase>();
-
-            var targetMethod = oxideModType.GetMethod("OnFrame", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance, null, new Type[] { typeof(float) }, null);
-
-            if (targetMethod == null)
-                return Array.Empty<MethodBase>();
-
-            return new MethodBase[] { targetMethod };
+            if (!string.Equals(assembly.GetName().Name, OxideCore_AssemblyName, StringComparison.OrdinalIgnoreCase)) continue;
+            _oxideCoreAssembly = assembly;
+            break;
         }
 
-        [HarmonyTranspiler]
-        public static IEnumerable<CodeInstruction> Transpile(IEnumerable<CodeInstruction> originalInstructions, ILGenerator ilGenerator)
+        if (_oxideCoreAssembly == null)
         {
-            var skipProcessingLabel = ilGenerator.DefineLabel();
-            var loopHeadLabel = ilGenerator.DefineLabel();
-            var loopBodyLabel = ilGenerator.DefineLabel();
+            return [];
+        }
 
-            var oxidePluginType = _oxideCoreAssembly.GetType(OxidePluginType_FullName, true);
-            var enumerableType = typeof(IEnumerable<>);
-            var oxidePluginEnumerableType = enumerableType.MakeGenericType(oxidePluginType);
-            var enumeratorType = typeof(IEnumerator<>);
-            var oxidePluginEnumeratorType = enumeratorType.MakeGenericType(oxidePluginType);
+        var oxideModType = _oxideCoreAssembly.GetType(OxideOxideModType_FullName, false);
 
-            var enumeratorLocal = ilGenerator.DeclareLocal(oxidePluginEnumeratorType);
-            var dictionaryLocal = ilGenerator.DeclareLocal(typeof(Dictionary<string, double>));
-            var pluginLocal = ilGenerator.DeclareLocal(oxidePluginType);
-            var currentTimeLocal = ilGenerator.DeclareLocal(typeof(float));
+        if (oxideModType == null)
+        {
+            return [];
+        }
 
-            var nextTickFieldInfo = typeof(OxideMod_OnFrame_Patch).GetField(nameof(nextTick), BindingFlags.Public | BindingFlags.Static);
+        var targetMethod = oxideModType.GetMethod("OnFrame", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance, null, [typeof(float)], null);
 
-            List<CodeInstruction> retList = new List<CodeInstruction>(originalInstructions);
+        if (targetMethod == null)
+        {
+            return [];
+        }
 
-            retList[0].labels.Add(skipProcessingLabel);
+        return [targetMethod];
+    }
 
-            var unityGetTimeMethodInfo = typeof(UnityEngine.Time).GetProperty(nameof(UnityEngine.Time.time)).GetGetMethod();
-            var oxideGetterMethodInfo = _oxideCoreAssembly.GetType(OxideInterfaceType_FullName, true).GetProperty("Oxide").GetGetMethod();
-            var rootPluginManagerGetterMethodInfo = _oxideCoreAssembly.GetType(OxideOxideModType_FullName, true).GetProperty("RootPluginManager").GetGetMethod();
-            var getPluginsMethodInfo = _oxideCoreAssembly.GetType(OxidePluginManagerType_FullName, true).GetMethod("GetPlugins");
-            var getPluginNameGetterMethodInfo = oxidePluginType.GetProperty("Name").GetGetMethod();
-            var getPluginTotalHookTimeGetterMethodInfo = oxidePluginType.GetProperty("TotalHookTime").GetGetMethod();
-            var getEnumeratorMethodInfo = oxidePluginEnumerableType.GetMethod("GetEnumerator");
+    [HarmonyTranspiler]
+    public static IEnumerable<CodeInstruction> Transpile(IEnumerable<CodeInstruction> originalInstructions, ILGenerator ilGenerator)
+    {
+        var skipProcessingLabel = ilGenerator.DefineLabel();
+        var loopHeadLabel = ilGenerator.DefineLabel();
+        var loopBodyLabel = ilGenerator.DefineLabel();
 
-            var hookFieldInfo = typeof(SingletonComponent<MetricsLogger>)
-                .GetField(nameof(SingletonComponent<MetricsLogger>.Instance), BindingFlags.Static | BindingFlags.Public);
+        var oxidePluginType = _oxideCoreAssembly.GetType(OxidePluginType_FullName, true);
+        var enumerableType = typeof(IEnumerable<>);
+        var oxidePluginEnumerableType = enumerableType.MakeGenericType(oxidePluginType);
+        var enumeratorType = typeof(IEnumerator<>);
+        var oxidePluginEnumeratorType = enumeratorType.MakeGenericType(oxidePluginType);
 
-            var hookMethodInfo = typeof(MetricsLogger)
-                .GetMethod(nameof(MetricsLogger.OnOxidePluginMetrics), BindingFlags.Instance | BindingFlags.NonPublic);
+        var enumeratorLocal = ilGenerator.DeclareLocal(oxidePluginEnumeratorType);
+        var dictionaryLocal = ilGenerator.DeclareLocal(typeof(Dictionary<string, double>));
+        var pluginLocal = ilGenerator.DeclareLocal(oxidePluginType);
+        var currentTimeLocal = ilGenerator.DeclareLocal(typeof(float));
 
-            retList.InsertRange(0, new CodeInstruction[]
-            {
-                new CodeInstruction(OpCodes.Ldsfld, hookFieldInfo),
-                new CodeInstruction(OpCodes.Brfalse_S, skipProcessingLabel),
+        var nextTickFieldInfo = typeof(OxideMod_OnFrame_Patch).GetField(nameof(nextTick), BindingFlags.Public | BindingFlags.Static);
 
-                new CodeInstruction(OpCodes.Call, unityGetTimeMethodInfo),
-                new CodeInstruction(OpCodes.Stloc, currentTimeLocal.LocalIndex),
+        var retList = new List<CodeInstruction>(originalInstructions);
 
-                new CodeInstruction(OpCodes.Ldsfld, nextTickFieldInfo),
-                new CodeInstruction(OpCodes.Ldloc, currentTimeLocal.LocalIndex),
-                new CodeInstruction(OpCodes.Bgt_S, skipProcessingLabel),
+        retList[0].labels.Add(skipProcessingLabel);
 
-                new CodeInstruction(OpCodes.Ldloc, currentTimeLocal.LocalIndex),
-                new CodeInstruction(OpCodes.Ldc_R4, 1f),
-                new CodeInstruction(OpCodes.Add),
-                new CodeInstruction(OpCodes.Stsfld, nextTickFieldInfo),
+        var unityGetTimeMethodInfo = typeof(UnityEngine.Time).GetProperty(nameof(UnityEngine.Time.time))?.GetGetMethod();
+        var oxideGetterMethodInfo = _oxideCoreAssembly.GetType(OxideInterfaceType_FullName, true).GetProperty("Oxide")?.GetGetMethod();
+        var rootPluginManagerGetterMethodInfo = _oxideCoreAssembly.GetType(OxideOxideModType_FullName, true).GetProperty("RootPluginManager")?.GetGetMethod();
+        var getPluginsMethodInfo = _oxideCoreAssembly.GetType(OxidePluginManagerType_FullName, true).GetMethod("GetPlugins");
+        var getPluginNameGetterMethodInfo = oxidePluginType.GetProperty("Name")?.GetGetMethod();
+        var getPluginTotalHookTimeGetterMethodInfo = oxidePluginType.GetProperty("TotalHookTime")?.GetGetMethod();
+        var getEnumeratorMethodInfo = oxidePluginEnumerableType.GetMethod("GetEnumerator");
 
-                new CodeInstruction(OpCodes.Call, oxideGetterMethodInfo),
-                new CodeInstruction(OpCodes.Callvirt, rootPluginManagerGetterMethodInfo),
-                new CodeInstruction(OpCodes.Callvirt, getPluginsMethodInfo),
-                new CodeInstruction(OpCodes.Callvirt, getEnumeratorMethodInfo),
-                new CodeInstruction(OpCodes.Stloc, enumeratorLocal.LocalIndex),
+        var hookFieldInfo = typeof(SingletonComponent<MetricsLogger>)
+            .GetField(nameof(SingletonComponent<MetricsLogger>.Instance), BindingFlags.Static | BindingFlags.Public);
 
-                new CodeInstruction(OpCodes.Newobj, typeof(Dictionary<string, double>).GetConstructor(Type.EmptyTypes)),
-                new CodeInstruction(OpCodes.Stloc, dictionaryLocal.LocalIndex),
+        var hookMethodInfo = typeof(MetricsLogger)
+            .GetMethod(nameof(MetricsLogger.OnOxidePluginMetrics), BindingFlags.Instance | BindingFlags.NonPublic);
 
-                // Jump to Loop Head
-                new CodeInstruction(OpCodes.Br_S, loopHeadLabel),
+        retList.InsertRange(0, [
+            new CodeInstruction(OpCodes.Ldsfld, hookFieldInfo),
+            new CodeInstruction(OpCodes.Brfalse_S, skipProcessingLabel),
 
-                // Loop Body Start
-                new CodeInstruction(OpCodes.Ldloc, enumeratorLocal.LocalIndex) { labels = { loopBodyLabel } },
-                new CodeInstruction(OpCodes.Callvirt, oxidePluginEnumeratorType.GetProperty(nameof(IEnumerator.Current)).GetGetMethod()),
-                new CodeInstruction(OpCodes.Stloc, pluginLocal.LocalIndex),
-                new CodeInstruction(OpCodes.Ldloc, dictionaryLocal.LocalIndex),
-                new CodeInstruction(OpCodes.Ldloc, pluginLocal.LocalIndex),
-                new CodeInstruction(OpCodes.Callvirt, getPluginNameGetterMethodInfo),
-                new CodeInstruction(OpCodes.Ldloc, pluginLocal.LocalIndex),
-                new CodeInstruction(OpCodes.Callvirt, getPluginTotalHookTimeGetterMethodInfo),
-                new CodeInstruction(OpCodes.Callvirt, dictionaryLocal.LocalType.GetMethod("set_Item")),
-                // Loop Body End
+            new CodeInstruction(OpCodes.Call, unityGetTimeMethodInfo),
+            new CodeInstruction(OpCodes.Stloc, currentTimeLocal.LocalIndex),
 
-                // Loop Head Start
-                new CodeInstruction(OpCodes.Ldloc, enumeratorLocal.LocalIndex) { labels = { loopHeadLabel } },
-                new CodeInstruction(OpCodes.Callvirt, typeof(IEnumerator).GetMethod(nameof(IEnumerator.MoveNext))),
-                new CodeInstruction(OpCodes.Brtrue_S, loopBodyLabel),
-                // Loop Head End
+            new CodeInstruction(OpCodes.Ldsfld, nextTickFieldInfo),
+            new CodeInstruction(OpCodes.Ldloc, currentTimeLocal.LocalIndex),
+            new CodeInstruction(OpCodes.Bgt_S, skipProcessingLabel),
+
+            new CodeInstruction(OpCodes.Ldloc, currentTimeLocal.LocalIndex),
+            new CodeInstruction(OpCodes.Ldc_R4, 1f),
+            new CodeInstruction(OpCodes.Add),
+            new CodeInstruction(OpCodes.Stsfld, nextTickFieldInfo),
+
+            new CodeInstruction(OpCodes.Call, oxideGetterMethodInfo),
+            new CodeInstruction(OpCodes.Callvirt, rootPluginManagerGetterMethodInfo),
+            new CodeInstruction(OpCodes.Callvirt, getPluginsMethodInfo),
+            new CodeInstruction(OpCodes.Callvirt, getEnumeratorMethodInfo),
+            new CodeInstruction(OpCodes.Stloc, enumeratorLocal.LocalIndex),
+
+            new CodeInstruction(OpCodes.Newobj, typeof(Dictionary<string, double>).GetConstructor(Type.EmptyTypes)),
+            new CodeInstruction(OpCodes.Stloc, dictionaryLocal.LocalIndex),
+
+            // Jump to Loop Head
+            new CodeInstruction(OpCodes.Br_S, loopHeadLabel),
+
+            // Loop Body Start
+            new CodeInstruction(OpCodes.Ldloc, enumeratorLocal.LocalIndex) { labels = { loopBodyLabel } },
+            new CodeInstruction(OpCodes.Callvirt, oxidePluginEnumeratorType.GetProperty(nameof(IEnumerator.Current))?.GetGetMethod()),
+            new CodeInstruction(OpCodes.Stloc, pluginLocal.LocalIndex),
+            new CodeInstruction(OpCodes.Ldloc, dictionaryLocal.LocalIndex),
+            new CodeInstruction(OpCodes.Ldloc, pluginLocal.LocalIndex),
+            new CodeInstruction(OpCodes.Callvirt, getPluginNameGetterMethodInfo),
+            new CodeInstruction(OpCodes.Ldloc, pluginLocal.LocalIndex),
+            new CodeInstruction(OpCodes.Callvirt, getPluginTotalHookTimeGetterMethodInfo),
+            new CodeInstruction(OpCodes.Callvirt, dictionaryLocal.LocalType.GetMethod("set_Item")),
+            // Loop Body End
+
+            // Loop Head Start
+            new CodeInstruction(OpCodes.Ldloc, enumeratorLocal.LocalIndex) { labels = { loopHeadLabel } },
+            new CodeInstruction(OpCodes.Callvirt, typeof(IEnumerator).GetMethod(nameof(IEnumerator.MoveNext))),
+            new CodeInstruction(OpCodes.Brtrue_S, loopBodyLabel),
+            // Loop Head End
                 
-                // Dispose of IEnumerator
-                new CodeInstruction(OpCodes.Ldloc, enumeratorLocal.LocalIndex),
-                new CodeInstruction(OpCodes.Callvirt, typeof(IDisposable).GetMethod(nameof(IDisposable.Dispose))),
+            // Dispose of IEnumerator
+            new CodeInstruction(OpCodes.Ldloc, enumeratorLocal.LocalIndex),
+            new CodeInstruction(OpCodes.Callvirt, typeof(IDisposable).GetMethod(nameof(IDisposable.Dispose))),
 
-                // Call MetricsLogger.OnOxidePluginMetrics
-                new CodeInstruction(OpCodes.Ldsfld, hookFieldInfo),
-                new CodeInstruction(OpCodes.Ldloc, dictionaryLocal.LocalIndex),
-                new CodeInstruction(OpCodes.Call, hookMethodInfo)
-            });
+            // Call MetricsLogger.OnOxidePluginMetrics
+            new CodeInstruction(OpCodes.Ldsfld, hookFieldInfo),
+            new CodeInstruction(OpCodes.Ldloc, dictionaryLocal.LocalIndex),
+            new CodeInstruction(OpCodes.Call, hookMethodInfo)
+        ]);
 
-            return retList;
-        }
+        return retList;
     }
 }

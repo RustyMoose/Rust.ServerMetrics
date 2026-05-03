@@ -10,17 +10,22 @@ public class RustServerMetricsLoader : IHarmonyModHooks
     public static bool __serverStarted = false;
     
     public static Harmony __harmonyInstance;
-    public static List<Harmony> __modTimeWarningsHarmonyInstances = new ();
+    
+    public static List<Harmony> __modTimeWarningsHarmonyInstances = [];
     
     public void OnLoaded(OnHarmonyModLoadedArgs args)
     {
         if (!Bootstrap.bootstrapInitRun)
+        {
             return;
+        }
         
         MetricsLogger.Initialize();
-            
+
         if (MetricsLogger.Instance != null)
+        {
             MetricsLogger.Instance.OnServerStarted();
+        }
     }
 
     public void OnUnloaded(OnHarmonyModUnloadedArgs args)
@@ -34,7 +39,9 @@ public class RustServerMetricsLoader : IHarmonyModHooks
         }
 
         if (MetricsLogger.Instance != null)
+        {
             Object.DestroyImmediate(MetricsLogger.Instance);
+        }
     }
 
     public void AddModTimeWarnings(List<MethodInfo> methods)

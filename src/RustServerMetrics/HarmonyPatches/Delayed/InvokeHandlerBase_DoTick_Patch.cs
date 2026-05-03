@@ -20,20 +20,20 @@ internal static class InvokeHandlerBase_DoTick_Patch
     private static readonly double TicksToMs = 1000.0 / Stopwatch.Frequency;
 
     private static readonly CodeMatch[] NeedleSequenceToFind =
-    {
+    [
         CodeMatch.LoadsField(AccessTools.Field(typeof(InvokeAction), nameof(InvokeAction.action))),
         CodeMatch.Calls(AccessTools.Method(typeof(Action), nameof(Action.Invoke)))
-    };
+    ];
 
     private static readonly CodeInstruction[] SequenceToInject =
-    {
+    [
         new(OpCodes.Call, AccessTools.Method(typeof(InvokeHandlerBase_DoTick_Patch), nameof(InvokeWrapper)))
-    };
+    ];
 
     #endregion
 
     #region Patching
-        
+
     [HarmonyPrepare]
     public static bool Prepare()
     {
@@ -57,7 +57,7 @@ internal static class InvokeHandlerBase_DoTick_Patch
     public static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> originalInstructions)
     {
         var instructionsList = originalInstructions.ToList();
-        
+
         try
         {
             var codeMatcher = new CodeMatcher(instructionsList);
@@ -75,11 +75,11 @@ internal static class InvokeHandlerBase_DoTick_Patch
             return instructionsList;
         }
     }
-        
+
     #endregion
 
     #region Handler
-        
+
     private static void InvokeWrapper(InvokeAction invokeAction)
     {
         if (!MetricsLogger.IsReady)
@@ -99,6 +99,6 @@ internal static class InvokeHandlerBase_DoTick_Patch
             MetricsLogger.Instance.ServerInvokes.LogTime(invokeAction.action.Method, ms);
         }
     }
-        
+
     #endregion
 }

@@ -4,7 +4,7 @@
         <AssemblyName>RustServerMetrics</AssemblyName>
         <ProjectGuid>{3C3A47A5-709A-42BB-B2BF-DB1FA0FEE316}</ProjectGuid>
         <TargetFramework>net48</TargetFramework>
-        <LangVersion>10</LangVersion>
+        <LangVersion>14</LangVersion>
         <OutputType>Library</OutputType>
         <Nullable>disable</Nullable>
         <AssemblySearchPaths>..\..\dependencies\rust;$(AssemblySearchPaths)</AssemblySearchPaths>
