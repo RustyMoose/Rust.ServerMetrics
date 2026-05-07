@@ -65,7 +65,7 @@ public class MetricsLogger : SingletonComponent<MetricsLogger>
     private ReportUploader _reportUploader;
     private Message.Type _lastMessageType;
     private bool _firstReportGenerated;
-    private int _slowMetricsCounter;
+    private int _lastFrameID;
     private System.Diagnostics.Process _currentProcess;
 
     public Uri BaseUri
@@ -339,20 +339,21 @@ public class MetricsLogger : SingletonComponent<MetricsLogger>
             _firstReportGenerated = true;
             return;
         }
-        var config = Configuration;
         var current = Performance.current;
+
+        if (current.frameID == _lastFrameID) return;
+        _lastFrameID = current.frameID;
+
+        var serverTag = Configuration.ServerTag;
         var epochNow = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString();
 
-        LogFrameRate(current, epochNow, config.ServerTag);
-
-        if (++_slowMetricsCounter < config.SlowMetricsInterval) return;
-        _slowMetricsCounter = 0;
-        LogSlowMetrics(current, epochNow, config.ServerTag);
+        LogPerformanceReport(current, epochNow, serverTag);
     }
 
-    private void LogFrameRate(Performance.Tick current, string epochNow, string serverTag)
+    private void LogPerformanceReport(Performance.Tick current, string epochNow, string serverTag)
     {
         _stringBuilder.Clear();
+
         _stringBuilder.Append("framerate,server=");
         _stringBuilder.Append(serverTag);
         _stringBuilder.Append(" instant=");
@@ -371,13 +372,8 @@ public class MetricsLogger : SingletonComponent<MetricsLogger>
         _stringBuilder.Append(current.frameTimeAverage);
         _stringBuilder.Append(" ");
         _stringBuilder.Append(epochNow);
+        _stringBuilder.Append("\n");
 
-        _reportUploader.AddToSendBuffer(_stringBuilder.ToString());
-    }
-
-    private void LogSlowMetrics(Performance.Tick current, string epochNow, string serverTag)
-    {
-        _stringBuilder.Clear();
         _stringBuilder.Append("memory,server=");
         _stringBuilder.Append(serverTag);
         _stringBuilder.Append(" used=");
