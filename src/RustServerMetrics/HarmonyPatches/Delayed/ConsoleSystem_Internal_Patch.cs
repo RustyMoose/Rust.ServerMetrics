@@ -18,13 +18,13 @@ internal class ConsoleSystem_Internal_Patch
     [HarmonyPrepare]
     public static bool Prepare()
     {
-        if (!RustServerMetricsLoader.__serverStarted)
+        if (RustServerMetricsLoader.__serverStarted)
         {
-            Debug.Log("Note: Cannot patch ConsoleSystem_Internal_Patch yet. We will patch it upon server start.");
-            return false;
+            return true;
         }
-
-        return true;
+        
+        Debug.Log($"[ServerMetrics] Note: Cannot patch {nameof(ConsoleSystem_Internal_Patch)} yet. We will patch it upon server start.");
+        return false;
     }
 
     [HarmonyTargetMethods]
