@@ -220,9 +220,12 @@ public class MetricsLogger : SingletonComponent<MetricsLogger>
         }
     }
 
-    internal bool OnClientPerformanceReport(ClientPerformanceReport clientPerformanceReport)
+    internal bool OnClientPerformanceReport(ProtoBuf.PerformanceReport clientPerformanceReport)
     {
-        if (clientPerformanceReport.request_id != _performanceReportRequestId) return false;
+        if (clientPerformanceReport.request_id != _performanceReportRequestId)
+        {
+            return false;
+        }
 
         UploadPacket("client_performance", clientPerformanceReport, (builder, report) =>
         {
