@@ -1,8 +1,11 @@
-﻿using HarmonyLib;
+﻿using System;
+using HarmonyLib;
 using System.Collections.Generic;
 using System.Reflection.Emit;
+using UnityEngine;
 
 // ReSharper disable InconsistentNaming
+// ReSharper disable PossibleMultipleEnumeration
 
 namespace RustServerMetrics.HarmonyPatches;
 
@@ -12,7 +15,9 @@ public class BasePlayer_OnDisconnected_Patch
     [HarmonyTranspiler]
     public static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions)
     {
-        var matcher = new CodeMatcher(instructions)
+        try
+        {
+            var matcher = new CodeMatcher(instructions)
                           .Start()
                           .InsertAndAdvance(
                               new CodeInstruction(OpCodes.Ldsfld,
@@ -23,6 +28,12 @@ public class BasePlayer_OnDisconnected_Patch
                                                   AccessTools.Method(typeof(MetricsLogger),
                                                                      nameof(MetricsLogger.OnPlayerDisconnected))));
 
-        return matcher.Instructions();
+            return matcher.Instructions();
+        }
+        catch (Exception e)
+        {
+            Debug.LogError($"[ServerMetrics] {nameof(BasePlayer_OnDisconnected_Patch)}: " + e.Message);
+            return instructions;
+        }
     }
 }
