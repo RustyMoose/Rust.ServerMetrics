@@ -23,7 +23,7 @@ internal class ConsoleSystem_Internal_Patch
             return true;
         }
         
-        Debug.Log($"Note: Cannot patch {nameof(ConsoleSystem_Internal_Patch)} yet. We will patch it upon server start.");
+        Debug.Log($"[ServerMetrics] Note: Cannot patch {nameof(ConsoleSystem_Internal_Patch)} yet. We will patch it upon server start.");
         return false;
     }
 

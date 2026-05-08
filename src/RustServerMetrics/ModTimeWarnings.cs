@@ -21,13 +21,13 @@ public static class ModTimeWarnings
     [HarmonyPrepare]
     public static bool Prepare()
     {
-        if (!RustServerMetricsLoader.__serverStarted)
+        if (RustServerMetricsLoader.__serverStarted)
         {
-            Debug.Log("Note: Cannot patch any time warnings yet. We will patch it upon server start.");
-            return false;
+            return true;
         }
-
-        return true;
+        
+        Debug.Log("[ServerMetrics] Note: Cannot patch any time warnings yet. We will patch it upon server start.");
+        return false;
     }
     
     [HarmonyTargetMethods]

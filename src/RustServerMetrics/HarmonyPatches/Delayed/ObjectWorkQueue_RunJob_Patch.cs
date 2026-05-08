@@ -26,7 +26,7 @@ internal static class ObjectWorkQueue_RunJob_Patch
             return true;
         }
         
-        Debug.Log($"Note: Cannot patch {nameof(ObjectWorkQueue_RunJob_Patch)} yet. We will patch it upon server start.");
+        Debug.Log($"[ServerMetrics] Note: Cannot patch {nameof(ObjectWorkQueue_RunJob_Patch)} yet. We will patch it upon server start.");
         return false;
     }
 

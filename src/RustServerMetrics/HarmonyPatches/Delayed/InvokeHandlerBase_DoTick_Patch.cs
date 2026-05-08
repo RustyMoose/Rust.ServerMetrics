@@ -42,7 +42,7 @@ internal static class InvokeHandlerBase_DoTick_Patch
             return true;
         }
         
-        UnityEngine.Debug.Log($"Note: Cannot patch {nameof(InvokeHandlerBase_DoTick_Patch)} yet. We will patch it upon server start.");
+        UnityEngine.Debug.Log($"[ServerMetrics] Note: Cannot patch {nameof(InvokeHandlerBase_DoTick_Patch)} yet. We will patch it upon server start.");
         return false;
     }
 
