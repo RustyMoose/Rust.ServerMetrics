@@ -19,10 +19,12 @@ public class Bootstrap_StartServer_Patch
         {
             var matcher = new CodeMatcher(instructions)
                 .InsertAndAdvance(
-                    new CodeInstruction(OpCodes.Call,
-                                        AccessTools.Method(typeof(MetricsLogger),
-                                                           nameof(MetricsLogger.Initialize))));
-            
+                    new CodeInstruction(
+                        OpCodes.Call,
+                        AccessTools.Method(
+                            typeof(MetricsLogger),
+                            nameof(MetricsLogger.Initialize))));
+
             return matcher.Instructions();
         }
         catch (Exception e)

@@ -18,20 +18,26 @@ public class BasePlayer_PlayerInit_Patch
         try
         {
             var matcher = new CodeMatcher(instructions)
-                          .MatchEndForward(
-                              new CodeMatch(OpCodes.Call,
-                                            AccessTools.Method(typeof(EACServer),
-                                                               nameof(EACServer.OnStartLoading))))
-                          .ThrowIfInvalid("Failed to find insertion point for BasePlayer.PlayerInit")
-                          .Advance(1)
-                          .InsertAndAdvance(
-                              new CodeInstruction(OpCodes.Ldsfld,
-                                                  AccessTools.Field(typeof(SingletonComponent<MetricsLogger>),
-                                                                    nameof(SingletonComponent<MetricsLogger>.Instance))),
-                              new CodeInstruction(OpCodes.Ldarg_0),
-                              new CodeInstruction(OpCodes.Call,
-                                                  AccessTools.Method(typeof(MetricsLogger),
-                                                                     nameof(MetricsLogger.OnPlayerInit))));
+                .MatchEndForward(
+                    new CodeMatch(
+                        OpCodes.Call,
+                        AccessTools.Method(
+                            typeof(EACServer),
+                            nameof(EACServer.OnStartLoading))))
+                .ThrowIfInvalid("Failed to find insertion point for BasePlayer.PlayerInit")
+                .Advance(1)
+                .InsertAndAdvance(
+                    new CodeInstruction(
+                        OpCodes.Ldsfld,
+                        AccessTools.Field(
+                            typeof(SingletonComponent<MetricsLogger>),
+                            nameof(SingletonComponent<MetricsLogger>.Instance))),
+                    new CodeInstruction(OpCodes.Ldarg_0),
+                    new CodeInstruction(
+                        OpCodes.Call,
+                        AccessTools.Method(
+                            typeof(MetricsLogger),
+                            nameof(MetricsLogger.OnPlayerInit))));
 
             return matcher.Instructions();
         }
