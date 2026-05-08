@@ -2,6 +2,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
 using System.Reflection.Emit;
 
@@ -13,7 +14,6 @@ namespace RustServerMetrics.HarmonyPatches;
 public static class OxideMod_OnFrame_Patch
 {
     private const string OxideCore_AssemblyName = "Oxide.Core";
-
     private const string OxidePluginType_FullName = "Oxide.Core.Plugins.Plugin";
     private const string OxideInterfaceType_FullName = "Oxide.Core.Interface";
     private const string OxideOxideModType_FullName = "Oxide.Core.OxideMod";
@@ -23,49 +23,37 @@ public static class OxideMod_OnFrame_Patch
     public static float nextTick = 0f;
 
     [HarmonyPrepare]
-    public static bool Prepare()
+    public static bool Prepare(MethodBase original)
     {
-        var assemblies = AppDomain.CurrentDomain.GetAssemblies();
-        foreach (var assembly in assemblies)
+        // If the original method is not null, then we've already loaded the oxide assembly.
+        if (original != null)
         {
-            if (!string.Equals(assembly.GetName().Name, OxideCore_AssemblyName, StringComparison.OrdinalIgnoreCase))
-            {
-                continue;
-            }
-                
-            _oxideCoreAssembly = assembly;
-                
-            break;
+            return true;
         }
-
-        return _oxideCoreAssembly != null;
+        
+        _oxideCoreAssembly = AppDomain.CurrentDomain
+            .GetAssemblies()
+            .FirstOrDefault(x => string.Equals(x.GetName().Name, OxideCore_AssemblyName, StringComparison.OrdinalIgnoreCase));
+        
+        return _oxideCoreAssembly is not null;
     }
         
     [HarmonyTargetMethods]
-    public static IEnumerable<MethodBase> TargetMethods(Harmony harmonyInstance)
+    public static IEnumerable<MethodBase> TargetMethods()
     {
-        foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
-        {
-            if (!string.Equals(assembly.GetName().Name, OxideCore_AssemblyName, StringComparison.OrdinalIgnoreCase)) continue;
-            _oxideCoreAssembly = assembly;
-            break;
-        }
-
-        if (_oxideCoreAssembly == null)
-        {
-            return [];
-        }
-
         var oxideModType = _oxideCoreAssembly.GetType(OxideOxideModType_FullName, false);
-
-        if (oxideModType == null)
+        if (oxideModType is null)
         {
             return [];
         }
 
-        var targetMethod = oxideModType.GetMethod("OnFrame", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance, null, [typeof(float)], null);
-
-        if (targetMethod == null)
+        var targetMethod = oxideModType.GetMethod(
+            "OnFrame", 
+            BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance, 
+            null, 
+            [typeof(float)], 
+            null);
+        if (targetMethod is null)
         {
             return [];
         }
@@ -74,7 +62,9 @@ public static class OxideMod_OnFrame_Patch
     }
 
     [HarmonyTranspiler]
-    public static IEnumerable<CodeInstruction> Transpile(IEnumerable<CodeInstruction> originalInstructions, ILGenerator ilGenerator)
+    public static IEnumerable<CodeInstruction> Transpiler(
+        IEnumerable<CodeInstruction> originalInstructions, 
+        ILGenerator ilGenerator)
     {
         var skipProcessingLabel = ilGenerator.DefineLabel();
         var loopHeadLabel = ilGenerator.DefineLabel();
