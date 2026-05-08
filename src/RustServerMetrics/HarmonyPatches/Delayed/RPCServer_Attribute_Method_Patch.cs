@@ -26,7 +26,7 @@ internal class RPCServer_Attribute_Method_Patch
             return true;
         }
 
-        Debug.Log("Note: Cannot patch RPCServer_Attribute_Method_Patch yet. We will patch it upon server start.");
+        Debug.Log($"Note: Cannot patch {nameof(RPCServer_Attribute_Method_Patch)} yet. We will patch it upon server start.");
         return false;
     }
 

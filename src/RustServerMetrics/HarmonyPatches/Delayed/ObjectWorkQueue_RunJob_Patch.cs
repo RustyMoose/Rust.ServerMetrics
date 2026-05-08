@@ -21,13 +21,13 @@ internal static class ObjectWorkQueue_RunJob_Patch
     [HarmonyPrepare]
     public static bool Prepare()
     {
-        if (!RustServerMetricsLoader.__serverStarted)
+        if (RustServerMetricsLoader.__serverStarted)
         {
-            Debug.Log("Note: Cannot patch ObjectWorkQueue_RunJob_Patch yet. We will patch it upon server start.");
-            return false;
+            return true;
         }
-
-        return true;
+        
+        Debug.Log($"Note: Cannot patch {nameof(ObjectWorkQueue_RunJob_Patch)} yet. We will patch it upon server start.");
+        return false;
     }
 
     [HarmonyTargetMethods]

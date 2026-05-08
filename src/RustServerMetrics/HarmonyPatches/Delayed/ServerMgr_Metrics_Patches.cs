@@ -20,13 +20,13 @@ internal static class ServerMgr_Metrics_Patches
     [HarmonyPrepare]
     public static bool Prepare()
     {
-        if (!RustServerMetricsLoader.__serverStarted)
+        if (RustServerMetricsLoader.__serverStarted)
         {
-            Debug.Log("Note: Cannot patch ServerMgr_Metrics_Patches yet. We will patch it upon server start.");
-            return false;
+            return true;
         }
-
-        return true;
+        
+        Debug.Log($"Note: Cannot patch {nameof(ServerMgr_Metrics_Patches)} yet. We will patch it upon server start.");
+        return false;
     }
 
     [HarmonyTargetMethods]

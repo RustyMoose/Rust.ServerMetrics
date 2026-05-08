@@ -37,14 +37,13 @@ internal static class InvokeHandlerBase_DoTick_Patch
     [HarmonyPrepare]
     public static bool Prepare()
     {
-        // ReSharper disable once InvertIf
-        if (!RustServerMetricsLoader.__serverStarted)
+        if (RustServerMetricsLoader.__serverStarted)
         {
-            UnityEngine.Debug.Log("Note: Cannot patch InvokeHandlerBase_DoTick_Patch yet. We will patch it upon server start.");
-            return false;
+            return true;
         }
-
-        return true;
+        
+        UnityEngine.Debug.Log($"Note: Cannot patch {nameof(InvokeHandlerBase_DoTick_Patch)} yet. We will patch it upon server start.");
+        return false;
     }
 
     [HarmonyTargetMethods]
