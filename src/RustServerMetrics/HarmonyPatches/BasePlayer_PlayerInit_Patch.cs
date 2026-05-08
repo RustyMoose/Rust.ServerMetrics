@@ -1,7 +1,5 @@
 ﻿using HarmonyLib;
-using System;
 using System.Collections.Generic;
-using System.Reflection;
 using System.Reflection.Emit;
 
 // ReSharper disable InconsistentNaming
@@ -12,26 +10,24 @@ namespace RustServerMetrics.HarmonyPatches;
 public class BasePlayer_PlayerInit_Patch
 {
     [HarmonyTranspiler]
-    public static IEnumerable<CodeInstruction> Transpile(IEnumerable<CodeInstruction> originalInstructions)
+    public static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions)
     {
-        var retList = new List<CodeInstruction>(originalInstructions);
+        var matcher = new CodeMatcher(instructions)
+                      .MatchEndForward(
+                          new CodeMatch(OpCodes.Call,
+                                        AccessTools.Method(typeof(EACServer),
+                                                           nameof(EACServer.OnStartLoading))))
+                      .ThrowIfInvalid("Failed to find insertion point for BasePlayer.PlayerInit")
+                      .Advance(1)
+                      .InsertAndAdvance(
+                          new CodeInstruction(OpCodes.Ldsfld,
+                                              AccessTools.Field(typeof(SingletonComponent<MetricsLogger>),
+                                                                nameof(SingletonComponent<MetricsLogger>.Instance))),
+                          new CodeInstruction(OpCodes.Ldarg_0),
+                          new CodeInstruction(OpCodes.Call,
+                                              AccessTools.Method(typeof(MetricsLogger),
+                                                                 nameof(MetricsLogger.OnPlayerInit))));
 
-        var fieldInfo = typeof(SingletonComponent<MetricsLogger>)
-            .GetField(nameof(SingletonComponent<MetricsLogger>.Instance), BindingFlags.Static | BindingFlags.Public);
-
-        var methodInfo = typeof(MetricsLogger)
-            .GetMethod(nameof(MetricsLogger.OnPlayerInit), BindingFlags.Instance | BindingFlags.NonPublic);
-
-        var idx = retList.FindIndex(x => x.opcode == OpCodes.Call && x.operand is MethodInfo methodInfo1 && methodInfo1.DeclaringType.Name == "EACServer" && methodInfo1.Name == "OnStartLoading");
-
-        if (idx < 0) throw new Exception("Failed to find the insertion index for PlayerInit");
-
-        retList.InsertRange(idx, [
-            new CodeInstruction(OpCodes.Ldsfld, fieldInfo),
-            new CodeInstruction(OpCodes.Ldarg_0),
-            new CodeInstruction(OpCodes.Call, methodInfo)
-        ]);
-
-        return retList;
+        return matcher.Instructions();
     }
 }
