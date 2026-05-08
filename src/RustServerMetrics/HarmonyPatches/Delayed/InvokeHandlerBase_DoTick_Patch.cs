@@ -3,11 +3,11 @@ using RustServerMetrics.HarmonyPatches.Utility;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Linq;
 using System.Reflection;
 using System.Reflection.Emit;
 
 // ReSharper disable once InconsistentNaming
+// ReSharper disable PossibleMultipleEnumeration
 
 namespace RustServerMetrics.HarmonyPatches.Delayed;
 
@@ -18,17 +18,6 @@ internal static class InvokeHandlerBase_DoTick_Patch
     #region Members
 
     private static readonly double TicksToMs = 1000.0 / Stopwatch.Frequency;
-
-    private static readonly CodeMatch[] NeedleSequenceToFind =
-    [
-        CodeMatch.LoadsField(AccessTools.Field(typeof(InvokeAction), nameof(InvokeAction.action))),
-        CodeMatch.Calls(AccessTools.Method(typeof(Action), nameof(Action.Invoke)))
-    ];
-
-    private static readonly CodeInstruction[] SequenceToInject =
-    [
-        new(OpCodes.Call, AccessTools.Method(typeof(InvokeHandlerBase_DoTick_Patch), nameof(InvokeWrapper)))
-    ];
 
     #endregion
 
@@ -41,7 +30,7 @@ internal static class InvokeHandlerBase_DoTick_Patch
         {
             return true;
         }
-        
+
         UnityEngine.Debug.Log($"[ServerMetrics] Note: Cannot patch {nameof(InvokeHandlerBase_DoTick_Patch)} yet. We will patch it upon server start.");
         return false;
     }
@@ -49,29 +38,41 @@ internal static class InvokeHandlerBase_DoTick_Patch
     [HarmonyTargetMethods]
     public static IEnumerable<MethodBase> TargetMethods()
     {
-        yield return AccessTools.DeclaredMethod(typeof(InvokeHandlerBase<InvokeHandler>), nameof(InvokeHandlerBase<InvokeHandler>.DoTick));
+        yield return AccessTools.DeclaredMethod(
+            typeof(InvokeHandlerBase<InvokeHandler>),
+            nameof(InvokeHandlerBase<InvokeHandler>.DoTick));
     }
 
     [HarmonyTranspiler]
-    public static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> originalInstructions)
+    public static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions)
     {
-        var instructionsList = originalInstructions.ToList();
-
         try
         {
-            var codeMatcher = new CodeMatcher(instructionsList);
-
-            codeMatcher.MatchStartForward(NeedleSequenceToFind)
-                       .ThrowIfInvalid("Unable to find the expected injection point")
-                       .RemoveInstructions(2)
-                       .InsertAndAdvance(SequenceToInject);
+            var codeMatcher = new CodeMatcher(instructions)
+                .MatchStartForward(
+                    CodeMatch.LoadsField(
+                        AccessTools.Field(
+                            typeof(InvokeAction),
+                            nameof(InvokeAction.action))),
+                    CodeMatch.Calls(
+                        AccessTools.Method(
+                            typeof(Action),
+                            nameof(Action.Invoke))))
+                .ThrowIfInvalid("Unable to find the expected injection point")
+                .RemoveInstructions(2)
+                .InsertAndAdvance(
+                    new CodeInstruction(
+                        OpCodes.Call, 
+                        AccessTools.Method(
+                            typeof(InvokeHandlerBase_DoTick_Patch), 
+                            nameof(InvokeWrapper))));
 
             return codeMatcher.Instructions();
         }
         catch (Exception e)
         {
             UnityEngine.Debug.LogError($"[ServerMetrics] {nameof(InvokeHandlerBase_DoTick_Patch)}: " + e.Message);
-            return instructionsList;
+            return instructions;
         }
     }
 
