@@ -18,6 +18,7 @@ public class Bootstrap_StartServer_Patch
         try
         {
             var matcher = new CodeMatcher(instructions)
+                .Start()
                 .InsertAndAdvance(
                     new CodeInstruction(
                         OpCodes.Call,
