@@ -252,7 +252,7 @@ public class MetricsLogger : SingletonComponent<MetricsLogger>
             else
             {
                 _perfReportDelayCounter[player.userID] = 0;
-                player.ClientRPCPlayer(null, player, "GetPerformanceReport", "legacy", _performanceReportRequestId);
+                player.ClientRPC(RpcTarget.Player("GetPerformanceReport", player), "legacy", _performanceReportRequestId);
             }
         }
 
