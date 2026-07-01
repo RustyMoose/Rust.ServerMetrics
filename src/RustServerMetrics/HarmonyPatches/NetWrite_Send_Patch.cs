@@ -11,7 +11,11 @@ public class NetWrite_Send_Patch
     [HarmonyPrefix]
     public static void Prefix(NetWrite __instance, SendInfo info)
     {
-        if (!MetricsLogger.IsReady) return;
+        if (!MetricsLogger.IsReady)
+        {
+            return;
+        }
+        
         SingletonComponent<MetricsLogger>.Instance.OnNetWriteSend(__instance, info);
     }
 }

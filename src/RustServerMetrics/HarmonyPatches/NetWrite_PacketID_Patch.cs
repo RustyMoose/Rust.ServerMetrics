@@ -11,7 +11,11 @@ public class NetWrite_PacketID_Patch
     [HarmonyPostfix]
     public static void Postfix(Message.Type val)
     {
-        if (!MetricsLogger.IsReady) return;
+        if (!MetricsLogger.IsReady)
+        {
+            return;
+        }
+        
         SingletonComponent<MetricsLogger>.Instance.OnNetWritePacketID(val);
     }
 }

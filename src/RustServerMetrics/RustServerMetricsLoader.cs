@@ -43,23 +43,4 @@ public class RustServerMetricsLoader : IHarmonyModHooks
             Object.DestroyImmediate(MetricsLogger.Instance);
         }
     }
-
-    public void AddModTimeWarnings(List<MethodInfo> methods)
-    { 
-        var instance = new Harmony($"RustServerMetrics.ModTimeWarnings.{__modTimeWarningsHarmonyInstances.Count}");
-        __modTimeWarningsHarmonyInstances.Add(instance);
-         
-        ModTimeWarnings.Methods.Clear();
-        ModTimeWarnings.Methods.AddRange(methods);
-        
-        var patchProcessor = new PatchClassProcessor(instance, typeof(ModTimeWarnings));
-        patchProcessor.Patch();
-        
-        foreach (var method in methods)
-        {
-            Debug.Log($"{method.DeclaringType?.Name}.{method.Name}");
-        }
-
-        Debug.Log($"[ServerMetrics]: Added {methods.Count} ModTimeWarnings");
-    }
 }
