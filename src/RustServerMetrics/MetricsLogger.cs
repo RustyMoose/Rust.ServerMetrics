@@ -17,8 +17,11 @@ public class MetricsLogger : SingletonComponent<MetricsLogger>
 {
     private const string ConfigurationPath = "HarmonyMods_Data/ServerMetrics/Configuration.json";
     private readonly StringBuilder _stringBuilder = new();
-    private readonly Dictionary<ulong, Action> _playerStatsActions = new();
     private readonly Dictionary<ulong, uint> _perfReportDelayCounter = new();
+
+    private const int PlayerStatsBucketCount = 10;
+    private const float PlayerStatsBucketInterval = 1f / PlayerStatsBucketCount;
+    private int _playerStatsBucket;
 
     private class NetworkUpdateData
     {
@@ -33,17 +36,39 @@ public class MetricsLogger : SingletonComponent<MetricsLogger>
         }
     }
 
-    private readonly Dictionary<Message.Type, NetworkUpdateData> _networkUpdates = Enum.GetValues(typeof(Message.Type))
-                                                                                       .Cast<Message.Type>()
-                                                                                       .Distinct()
-                                                                                       .ToDictionary(x => x, 
-                                                                                                     _ => new NetworkUpdateData(0, 0));
+    private static readonly Message.Type[] MessageTypes = Enum.GetValues(typeof(Message.Type))
+                                                              .Cast<Message.Type>()
+                                                              .Distinct()
+                                                              .ToArray();
     
-    private static readonly IReadOnlyDictionary<Message.Type, string> MessageTypeNames = Enum.GetValues(typeof(Message.Type))
-                                                                                             .Cast<Message.Type>()
-                                                                                             .Distinct()
-                                                                                             .ToDictionary(x => x, 
-                                                                                                           x => x.ToString());
+    private static readonly int MessageTypeSlotOffset = MessageTypes.Min(x => (int)x);
+    private static readonly int MessageTypeSlotCount = MessageTypes.Max(x => (int)x) - MessageTypeSlotOffset + 1;
+
+    private static readonly string[] MessageTypeNames = BuildMessageTypeNames();
+
+    private readonly NetworkUpdateData[] _networkUpdates = BuildNetworkUpdates();
+
+    private static string[] BuildMessageTypeNames()
+    {
+        var names = new string[MessageTypeSlotCount];
+        foreach (var messageType in MessageTypes)
+        {
+            names[(int)messageType - MessageTypeSlotOffset] = messageType.ToString();
+        }
+
+        return names;
+    }
+
+    private static NetworkUpdateData[] BuildNetworkUpdates()
+    {
+        var networkUpdates = new NetworkUpdateData[MessageTypeSlotCount];
+        foreach (var messageType in MessageTypes)
+        {
+            networkUpdates[(int)messageType - MessageTypeSlotOffset] = new NetworkUpdateData(0, 0);
+        }
+
+        return networkUpdates;
+    }
 
     public readonly MetricsTimeStorage<MethodInfo> ServerInvokes = new("invoke_execution", LogMethodInfo);
     public readonly MetricsTimeStorage<string> ServerRpcCalls = new("rpc_calls", LogMethodName);
@@ -139,6 +164,7 @@ public class MetricsLogger : SingletonComponent<MetricsLogger>
     public void StartLoggingMetrics()
     {
         InvokeRepeating(LogNetworkUpdates, UnityEngine.Random.Range(0.25f, 0.75f), 0.5f);
+        InvokeRepeating(GatherPlayerStatsBucket, UnityEngine.Random.Range(0.5f, 1.5f), PlayerStatsBucketInterval);
 
         InvokeRepeating(ServerInvokes.SerializeToStringBuilder, UnityEngine.Random.Range(0f, 1f), 1f);
         InvokeRepeating(ServerRpcCalls.SerializeToStringBuilder, UnityEngine.Random.Range(0f, 1f), 1f);
@@ -155,20 +181,13 @@ public class MetricsLogger : SingletonComponent<MetricsLogger>
     {
         if (!Ready) return;
         if (!Configuration.GatherPlayerMetrics) return;
-        var action = new Action(() => GatherPlayerSecondStats(player));
-        if (_playerStatsActions.TryGetValue(player.userID, out var existingAction))
-            player.CancelInvoke(existingAction);
-        _playerStatsActions[player.userID] = action;
-        player.InvokeRepeating(action, UnityEngine.Random.Range(0.5f, 1.5f), 1f);
+
+        _perfReportDelayCounter[player.userID] = (uint)UnityEngine.Random.Range(0, 5);
     }
 
     internal void OnPlayerDisconnected(BasePlayer player)
     {
         if (!Ready) return;
-        if (!Configuration.GatherPlayerMetrics) return;
-        if (_playerStatsActions.TryGetValue(player.userID, out var action))
-            player.CancelInvoke(action);
-        _playerStatsActions.Remove(player.userID);
         _perfReportDelayCounter.Remove(player.userID);
     }
 
@@ -189,7 +208,18 @@ public class MetricsLogger : SingletonComponent<MetricsLogger>
             return;
         }
             
-        var data = _networkUpdates[_lastMessageType];
+        var slot = (int)_lastMessageType - MessageTypeSlotOffset;
+        if ((uint)slot >= (uint)_networkUpdates.Length)
+        {
+            return;
+        }
+
+        var data = _networkUpdates[slot];
+        if (data == null)
+        {
+            return;
+        }
+
         if (sendInfo.connection != null)
         {
             data.Count++;
@@ -199,7 +229,7 @@ public class MetricsLogger : SingletonComponent<MetricsLogger>
         {
             var count = sendInfo.connections.Count;
             data.Count += count;
-            data.Bytes += write.Length * count;
+            data.Bytes += (long)write.Length * count;
         }
     }
 
@@ -240,8 +270,28 @@ public class MetricsLogger : SingletonComponent<MetricsLogger>
         return true;
     }
 
+    private void GatherPlayerStatsBucket()
+    {
+        if (!Ready) return;
+        if (!Configuration.GatherPlayerMetrics) return;
+
+        var players = BasePlayer.activePlayerList;
+        var bucket = _playerStatsBucket;
+        _playerStatsBucket = bucket + 1 < PlayerStatsBucketCount ? bucket + 1 : 0;
+
+        for (var i = bucket; i < players.Count; i += PlayerStatsBucketCount)
+        {
+            var player = players[i];
+            if (player == null) continue;
+
+            GatherPlayerSecondStats(player);
+        }
+    }
+
     private void GatherPlayerSecondStats(BasePlayer player)
     {
+        if (player.net?.connection == null) return;
+
         if (!player.IsReceivingSnapshot)
         {
             _perfReportDelayCounter.TryGetValue(player.userID, out var perfReportCounter);
@@ -259,11 +309,12 @@ public class MetricsLogger : SingletonComponent<MetricsLogger>
         UploadPacket("connection_latency", player, (builder, basePlayer) =>
         {
             var ip = basePlayer.net.connection.ipaddress;
+            var portSeparator = ip.LastIndexOf(':');
 
             builder.Append(",steamid=");
             builder.Append(basePlayer.UserIDString);
             builder.Append(",ip=");
-            builder.Append(ip[..ip.LastIndexOf(':')]);
+            builder.Append(ip, 0, portSeparator < 0 ? ip.Length : portSeparator);
             builder.Append(" ping=");
             builder.Append(Net.sv.GetAveragePing(basePlayer.net.connection));
             builder.Append("i,packet_loss=");
@@ -274,7 +325,7 @@ public class MetricsLogger : SingletonComponent<MetricsLogger>
 
     private void LogNetworkUpdates()
     {
-        if (_networkUpdates.Count < 1) return;
+        if (_networkUpdates.Length < 1) return;
         var serverTag = Configuration.ServerTag;
         var epochNow = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         _stringBuilder.Clear();
@@ -282,12 +333,21 @@ public class MetricsLogger : SingletonComponent<MetricsLogger>
         _stringBuilder.Append(serverTag);
         _stringBuilder.Append(" ");
 
-        var enumerator = _networkUpdates.GetEnumerator();
-        if (enumerator.MoveNext())
+        var isFirstField = true;
+        for (var slot = 0; slot < _networkUpdates.Length; slot++)
         {
-            var networkUpdate = enumerator.Current;
-            var key = MessageTypeNames[networkUpdate.Key];
-            var value = networkUpdate.Value;
+            var value = _networkUpdates[slot];
+            if (value == null) continue;
+
+            var key = MessageTypeNames[slot];
+
+            if (!isFirstField)
+            {
+                _stringBuilder.Append(",");
+            }
+
+            isFirstField = false;
+
             // Count first named {type}
             _stringBuilder.Append(key);
             _stringBuilder.Append("=");
@@ -303,35 +363,11 @@ public class MetricsLogger : SingletonComponent<MetricsLogger>
             _stringBuilder.Append(value.Bytes);
             _stringBuilder.Append("i");
             value.Bytes = 0;
-
-            while (enumerator.MoveNext())
-            {
-                networkUpdate = enumerator.Current;
-                key = MessageTypeNames[networkUpdate.Key];
-                value = networkUpdate.Value;
-
-                // Count first named {type}
-                _stringBuilder.Append(",");
-                _stringBuilder.Append(key);
-                _stringBuilder.Append("=");
-                _stringBuilder.Append(value.Count);
-                _stringBuilder.Append("i");
-                value.Count = 0;
-
-                // Bytes second named as "{type}_bytes"
-                _stringBuilder.Append(",");
-                _stringBuilder.Append(key);
-                _stringBuilder.Append("_bytes");
-                _stringBuilder.Append("=");
-                _stringBuilder.Append(value.Bytes);
-                _stringBuilder.Append("i");
-                value.Bytes = 0;
-            }
         }
 
         _stringBuilder.Append(" ");
         _stringBuilder.Append(epochNow);
-        _reportUploader.AddToSendBuffer(_stringBuilder.ToString());
+        _reportUploader.AddToSendBuffer(_stringBuilder);
     }
 
     internal void OnPerformanceReportGenerated()
@@ -438,7 +474,7 @@ public class MetricsLogger : SingletonComponent<MetricsLogger>
         _stringBuilder.Append("i ");
         _stringBuilder.Append(epochNow);
 
-        _reportUploader.AddToSendBuffer(_stringBuilder.ToString());
+        _reportUploader.AddToSendBuffer(_stringBuilder);
     }
 
 
@@ -458,10 +494,12 @@ public class MetricsLogger : SingletonComponent<MetricsLogger>
         _stringBuilder.Append(" ");
         _stringBuilder.Append(epochNow);
 
-        AddToSendBuffer(_stringBuilder.ToString());
+        AddToSendBuffer(_stringBuilder);
     }
 
     public void AddToSendBuffer(string toString) => _reportUploader.AddToSendBuffer(toString);
+
+    public void AddToSendBuffer(StringBuilder payload) => _reportUploader.AddToSendBuffer(payload);
 
     private long GetMemoryUsage(Performance.Tick performanceTick)
     {
@@ -550,6 +588,8 @@ public class MetricsLogger : SingletonComponent<MetricsLogger>
         _stringBuilder.AppendLine("Report Uploader:");
         _stringBuilder.Append("\tRunning: "); _stringBuilder.Append(_reportUploader.IsRunning); _stringBuilder.AppendLine();
         _stringBuilder.Append("\tIn Buffer: "); _stringBuilder.Append(_reportUploader.BufferSize); _stringBuilder.AppendLine();
+        _stringBuilder.Append("\tIn Flight: "); _stringBuilder.Append(_reportUploader.PendingBatches); _stringBuilder.AppendLine();
+        _stringBuilder.Append("\tDropped (total): "); _stringBuilder.Append(_reportUploader.TotalDroppedReports); _stringBuilder.AppendLine();
         arg.ReplyWith(_stringBuilder.ToString());
     }
 
@@ -568,12 +608,7 @@ public class MetricsLogger : SingletonComponent<MetricsLogger>
                 CancelInvoke(invoke.action);
             }
 
-            foreach (var player in _playerStatsActions)
-            {
-                var basePlayer = BasePlayer.FindByID(player.Key);
-                if (basePlayer == null) continue;
-                basePlayer.CancelInvoke(player.Value);
-            }
+            _perfReportDelayCounter.Clear();
             _reportUploader.Stop();
 
             if (!Configuration.Enabled)
