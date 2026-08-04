@@ -49,7 +49,7 @@ internal static class ObjectWorkQueue_RunJob_Patch
                 continue;
             }
 
-            var method =  AccessTools.Method(type, nameof(ObjectWorkQueue<>.RunJob));
+            var method = AccessTools.Method(type, nameof(ObjectWorkQueue<>.RunJob));
             if (method != null && yielded.Add(type.FullName))
             {
                 yield return method;
@@ -58,9 +58,10 @@ internal static class ObjectWorkQueue_RunJob_Patch
     }
 
     [HarmonyTranspiler]
-    public static IEnumerable<CodeInstruction> Transpile(IEnumerable<CodeInstruction> originalInstructions,
-                                                         MethodBase methodBase,
-                                                         ILGenerator ilGenerator)
+    public static IEnumerable<CodeInstruction> Transpile(
+        IEnumerable<CodeInstruction> originalInstructions,
+        MethodBase methodBase,
+        ILGenerator ilGenerator)
     {
         var ret = originalInstructions.ToList();
         var local = ilGenerator.DeclareLocal(typeof(long));
@@ -70,10 +71,11 @@ internal static class ObjectWorkQueue_RunJob_Patch
             new CodeInstruction(OpCodes.Stloc, local)
         ]);
 
-        return Helpers.Postfix(ret,
-                               CustomPostfix,
-                               new CodeInstruction(OpCodes.Ldstr, $"{methodBase.DeclaringType?.Name}.{methodBase.Name}"),
-                               new CodeInstruction(OpCodes.Ldloc, local));
+        return Helpers.Postfix(
+            ret,
+            CustomPostfix,
+            new CodeInstruction(OpCodes.Ldstr, $"{methodBase.DeclaringType?.Name}.{methodBase.Name}"),
+            new CodeInstruction(OpCodes.Ldloc, local));
     }
 
     private static void CustomPostfix(string methodName, long __state)
