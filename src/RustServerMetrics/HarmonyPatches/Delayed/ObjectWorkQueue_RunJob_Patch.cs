@@ -31,7 +31,7 @@ internal static class ObjectWorkQueue_RunJob_Patch
     }
 
     [HarmonyTargetMethods]
-    public static IEnumerable<MethodBase> TargetMethods(Harmony harmonyInstance)
+    public static IEnumerable<MethodBase> TargetMethods()
     {
         var assemblyCSharp = typeof(BaseNetworkable).Assembly;
         var typesToScan = new Stack<Type>(assemblyCSharp.GetTypes());
@@ -39,24 +39,29 @@ internal static class ObjectWorkQueue_RunJob_Patch
 
         while (typesToScan.TryPop(out var type))
         {
-            var subTypes = type.GetNestedTypes();
-            foreach (var t in subTypes)
-                typesToScan.Push(t);
-
-            if (type.BaseType == null || !type.BaseType.Name.Contains("ObjectWorkQueue"))
-                continue;
-
-            if (yielded.Add(type.FullName))
+            foreach (var t in type.GetNestedTypes())
             {
-                yield return AccessTools.Method(type, "RunJob");
+                typesToScan.Push(t);
+            }
+
+            if (type.BaseType == null || !type.BaseType.Name.Contains(nameof(ObjectWorkQueue)))
+            {
+                continue;
+            }
+
+            var method = AccessTools.Method(type, nameof(ObjectWorkQueue<>.RunJob));
+            if (method != null && yielded.Add(type.FullName))
+            {
+                yield return method;
             }
         }
     }
 
     [HarmonyTranspiler]
-    public static IEnumerable<CodeInstruction> Transpile(IEnumerable<CodeInstruction> originalInstructions,
-                                                         MethodBase methodBase,
-                                                         ILGenerator ilGenerator)
+    public static IEnumerable<CodeInstruction> Transpile(
+        IEnumerable<CodeInstruction> originalInstructions,
+        MethodBase methodBase,
+        ILGenerator ilGenerator)
     {
         var ret = originalInstructions.ToList();
         var local = ilGenerator.DeclareLocal(typeof(long));
@@ -66,10 +71,11 @@ internal static class ObjectWorkQueue_RunJob_Patch
             new CodeInstruction(OpCodes.Stloc, local)
         ]);
 
-        return Helpers.Postfix(ret,
-                               CustomPostfix,
-                               new CodeInstruction(OpCodes.Ldstr, $"{methodBase.DeclaringType?.Name}.{methodBase.Name}"),
-                               new CodeInstruction(OpCodes.Ldloc, local));
+        return Helpers.Postfix(
+            ret,
+            CustomPostfix,
+            new CodeInstruction(OpCodes.Ldstr, $"{methodBase.DeclaringType?.Name}.{methodBase.Name}"),
+            new CodeInstruction(OpCodes.Ldloc, local));
     }
 
     private static void CustomPostfix(string methodName, long __state)
