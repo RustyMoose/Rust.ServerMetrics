@@ -61,6 +61,7 @@ public class MetricsLogger : SingletonComponent<MetricsLogger>
     internal ConfigData Configuration { get; private set; }
 
     private Uri _baseUri;
+    private string _authorizationHeader;
     private readonly int _performanceReportRequestId = UnityEngine.Random.Range(-2147483648, 2147483647);
     private ReportUploader _reportUploader;
     private Message.Type _lastMessageType;
@@ -77,9 +78,22 @@ public class MetricsLogger : SingletonComponent<MetricsLogger>
                 return _baseUri;
             }
 
-            _baseUri = new Uri(new Uri(Configuration.DatabaseUrl), 
-                               $"/write?db={Configuration.DatabaseName}&precision=ms&u={Configuration.DatabaseUser}&p={Configuration.DatabasePassword}");
+            EnsureInfluxEndpoint();
             return _baseUri;
+        }
+    }
+
+    internal string AuthorizationHeader
+    {
+        get
+        {
+            if (_authorizationHeader != null)
+            {
+                return _authorizationHeader;
+            }
+
+            EnsureInfluxEndpoint();
+            return _authorizationHeader;
         }
     }
 
@@ -631,13 +645,14 @@ public class MetricsLogger : SingletonComponent<MetricsLogger>
         {
             var configStr = File.ReadAllText(ConfigurationPath);
             Configuration = JsonConvert.DeserializeObject<ConfigData>(configStr) ?? new ConfigData();
-            var uri = new Uri(Configuration.DatabaseUrl);
-            _baseUri = new Uri(uri, $"/write?db={Configuration.DatabaseName}&precision=ms&u={Configuration.DatabaseUser}&p={Configuration.DatabasePassword}");
+            EnsureInfluxEndpoint();
         }
         catch
         {
             Debug.LogError("[ServerMetrics]: The configuration seems to be missing or malformed. Defaults will be loaded.");
             Configuration = new ConfigData();
+            _baseUri = null;
+            _authorizationHeader = null;
 
             if (File.Exists(ConfigurationPath))
             {
@@ -645,6 +660,16 @@ public class MetricsLogger : SingletonComponent<MetricsLogger>
             }
         }
         SaveConfiguration();
+    }
+
+    private void EnsureInfluxEndpoint()
+    {
+        var uri = new Uri(Configuration.DatabaseUrl);
+        _baseUri = new Uri(uri, $"/write?db={Configuration.DatabaseName}&precision=ms");
+
+        var credentials = Convert.ToBase64String(
+            Encoding.UTF8.GetBytes($"{Configuration.DatabaseUser}:{Configuration.DatabasePassword}"));
+        _authorizationHeader = $"Basic {credentials}";
     }
 
     private void SaveConfiguration()

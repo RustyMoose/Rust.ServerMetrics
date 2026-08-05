@@ -120,6 +120,11 @@ internal class ReportUploader : MonoBehaviour
             useHttpContinue = true,
             redirectLimit = 5
         };
+        var authorizationHeader = _metricsLogger.AuthorizationHeader;
+        if (!string.IsNullOrEmpty(authorizationHeader))
+        {
+            request.SetRequestHeader("Authorization", authorizationHeader);
+        }
         yield return request.SendWebRequest();
 
         if (request.isNetworkError)
