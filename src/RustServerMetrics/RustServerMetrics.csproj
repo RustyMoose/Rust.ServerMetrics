@@ -7,7 +7,6 @@
         <LangVersion>14</LangVersion>
         <OutputType>Library</OutputType>
         <Nullable>disable</Nullable>
-        <AssemblySearchPaths>..\..\dependencies\rust;$(AssemblySearchPaths)</AssemblySearchPaths>
     </PropertyGroup>
 
     <PropertyGroup Condition="'$(Configuration)' == 'Release'">

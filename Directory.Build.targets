@@ -1,0 +1,9 @@
+<Project>
+    <PropertyGroup>
+        <!-- Each machine sets RUST_DEPS to its one canonical folder; relative fallback if unset -->
+        <RustDeps Condition="'$(RustDeps)' == ''">$(RUST_DEPS_PUBLICIZED)</RustDeps>
+        <RustDeps Condition="'$(RustDeps)' == ''">$(MSBuildThisFileDirectory)dependencies\rust</RustDeps>
+
+        <AssemblySearchPaths>$(RustDeps);$(AssemblySearchPaths)</AssemblySearchPaths>
+    </PropertyGroup>
+</Project>
