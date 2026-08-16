@@ -54,6 +54,8 @@ The username of a user created in step 5.
 ### Influx Database Password
 The password for the user created in step 5.
 
+Credentials are sent via HTTP Basic authentication (`Authorization` header), not as URL query parameters, so they are not written to reverse-proxy or CDN access logs.
+
 ### Server Tag
 This is a static tag that is added to all records submitted by your rust server to the database, this tag should be different for each rust server
 
