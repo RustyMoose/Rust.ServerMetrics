@@ -6,22 +6,27 @@ namespace RustServerMetrics.HarmonyPatches.Utility;
 
 public class MetricsTimeStorage<TKey>(string metricKey, Action<StringBuilder, TKey> stringBuilderSerializer)
 {
-    private readonly Dictionary<TKey, double> _dict = new ();
-    
+    private sealed class Accumulator
+    {
+        public double Duration;
+    }
+
+    private readonly Dictionary<TKey, Accumulator> _dict = new ();
+
     private readonly StringBuilder _sb = new();
 
     public void LogTime(TKey key, double milliseconds)
     {
         if (!MetricsLogger.IsReady)
             return;
-        
-        if (!_dict.TryGetValue(key, out var currentDuration))
+
+        if (_dict.TryGetValue(key, out var accumulator))
         {
-            _dict.Add(key, milliseconds);
+            accumulator.Duration += milliseconds;
             return;
         }
-        
-        _dict[key] = currentDuration + milliseconds;        
+
+        _dict.Add(key, new Accumulator { Duration = milliseconds });
     }
 
     public void SerializeToStringBuilder()
@@ -44,10 +49,10 @@ public class MetricsTimeStorage<TKey>(string metricKey, Action<StringBuilder, TK
             stringBuilderSerializer.Invoke(_sb, item.Key);
 
             _sb.Append("\" duration=");
-            _sb.Append((float)item.Value);
+            _sb.Append((float)item.Value.Duration);
             _sb.Append(" ");
             _sb.Append(epochNow);
-            instance.AddToSendBuffer(_sb.ToString());
+            instance.AddToSendBuffer(_sb);
         }
 
         _dict.Clear();

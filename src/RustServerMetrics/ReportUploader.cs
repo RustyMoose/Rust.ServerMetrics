@@ -1,29 +1,28 @@
 ﻿using System;
-using System.Collections;
-using System.Collections.Generic;
 using System.Text;
 using UnityEngine;
-using UnityEngine.Networking;
 
 namespace RustServerMetrics;
 
 internal class ReportUploader : MonoBehaviour
 {
-    private const int SendBufferCapacity = 100000;
+    private const int SendBufferCapacity = 8 * 1024 * 1024;
+
+    private const int MaxBatchCharacters = 60000;
+
+    private const int RequestTimeoutSeconds = 15;
+
+    private const float FlushInterval = 1f;
 
     private readonly Action _notifySubsequentNetworkFailuresAction;
     private readonly Action _notifySubsequentHttpFailuresAction;
 
-    private readonly Queue<string> _sendBuffer = new(SendBufferCapacity);
-    private readonly StringBuilder _payloadBuilder = new();
+    private readonly MetricsSendBuffer _sendBuffer = new(SendBufferCapacity);
 
-    private bool _isRunning;
-    private ushort _attempt;
-    private byte[] _data;
-    private Uri _uri;
+    private MetricsUploadWorker _worker;
     private MetricsLogger _metricsLogger;
-
-    private char[] _charBuffer = new char[8192 * 4];
+    private bool _isRunning;
+    private float _nextFlush;
 
     private bool _throttleNetworkErrorMessages;
     private uint _accumulatedNetworkErrors;
@@ -39,9 +38,11 @@ internal class ReportUploader : MonoBehaviour
             return configVal < 1000 ? (ushort)1000 : configVal;
         }
     }
-    
+
     public bool IsRunning => _isRunning;
-    public int BufferSize => _sendBuffer.Count;
+    public int BufferSize => _sendBuffer.LineCount;
+    public int PendingBatches => _worker?.PendingBatches ?? 0;
+    public long TotalDroppedReports => _sendBuffer.TotalDropped + (_worker?.DroppedLines ?? 0);
 
     public ReportUploader()
     {
@@ -66,98 +67,106 @@ internal class ReportUploader : MonoBehaviour
 
     public void AddToSendBuffer(string payload)
     {
-        if (_sendBuffer.Count == SendBufferCapacity)
-        {
-            _sendBuffer.Dequeue();
-        }
-
-        _sendBuffer.Enqueue(payload);
-
-        if (!_isRunning)
-        {
-            StartCoroutine(SendBufferLoop());
-        }
-    }
-
-    private IEnumerator SendBufferLoop()
-    {
+        _sendBuffer.Append(payload);
         _isRunning = true;
-        yield return null;
-
-        while (_sendBuffer.Count > 0 && _isRunning)
-        {
-            var amountToTake = Mathf.Min(_sendBuffer.Count, BatchSize);
-            for (var i = 0; i < amountToTake; i++)
-            {
-                _payloadBuilder.Append(_sendBuffer.Dequeue());
-                _payloadBuilder.Append("\n");
-            }
-            _attempt = 0;
-
-            // more GC friendly GetBytes implementation
-            if (_payloadBuilder.Length > _charBuffer.Length)
-            {
-                _charBuffer = new char[_payloadBuilder.Length + 1024];
-            }
-
-            _payloadBuilder.CopyTo(0, _charBuffer, 0, _payloadBuilder.Length);
-            _data = Encoding.UTF8.GetBytes(_charBuffer, 0, _payloadBuilder.Length);
-
-            _uri = _metricsLogger.BaseUri;
-            _payloadBuilder.Clear();
-            yield return SendRequest();
-        }
-        _isRunning = false;
     }
 
-    private IEnumerator SendRequest()
+    public void AddToSendBuffer(StringBuilder payload)
     {
-        var request = new UnityWebRequest(_uri, UnityWebRequest.kHttpVerbPOST)
-        {
-            uploadHandler = new UploadHandlerRaw(_data),
-            downloadHandler = new DownloadHandlerBuffer(),
-            timeout = 15,
-            useHttpContinue = true,
-            redirectLimit = 5
-        };
-        yield return request.SendWebRequest();
+        _sendBuffer.Append(payload);
+        _isRunning = true;
+    }
 
-        if (request.isNetworkError)
+    private void Update()
+    {
+        if (_metricsLogger == null)
         {
-            if (_attempt >= 2)
-            {
-                if (_throttleNetworkErrorMessages)
-                {
-                    _accumulatedNetworkErrors += 1;
-                }
-                else
-                {
-                    Debug.LogError($"Two consecutive network failures occurred while submitting a batch of metrics");
-                    InvokeHandler.Invoke(this, _notifySubsequentNetworkFailuresAction, 5);
-                    _throttleNetworkErrorMessages = true;
-                }
-                yield break;
-            }
-
-            _attempt++;
-            yield return SendRequest();
-            yield break;
+            Stop();
+            return;
         }
 
-        if (request.isHttpError)
+        if (_worker != null)
         {
-            if (_throttleHttpErrorMessages)
-            {
-                _accumulatedHttpErrors += 1;
-            }
-            else
-            {
-                Debug.LogError($"A HTTP error occurred while submitting batch of metrics: {request.error}");
-                if (_metricsLogger.Configuration?.DebugLogging == true) Debug.LogError(request.downloadHandler.text);
-                InvokeHandler.Invoke(this, _notifySubsequentHttpFailuresAction, 5);
-                _throttleHttpErrorMessages = true;
-            }
+            DrainFailures();
         }
+
+        if (_isRunning)
+        {
+            PumpBatches();
+        }
+    }
+
+    private void PumpBatches()
+    {
+        var queuedLines = _sendBuffer.LineCount;
+        if (queuedLines == 0) return;
+
+        var batchSize = BatchSize;
+
+        if (queuedLines < batchSize && Time.realtimeSinceStartup < _nextFlush) return;
+        _nextFlush = Time.realtimeSinceStartup + FlushInterval;
+
+        var worker = EnsureWorker();
+        var compress = _metricsLogger.Configuration?.CompressRequests ?? true;
+        var captureResponse = _metricsLogger.Configuration?.DebugLogging == true;
+
+        while (_sendBuffer.LineCount > 0 && worker.HasRoom)
+        {
+            var batch = _sendBuffer.TakeBatch(batchSize, MaxBatchCharacters, out var characterCount);
+            var lines = _sendBuffer.LastBatchLineCount;
+            var data = Encoding.UTF8.GetBytes(batch, 0, characterCount);
+
+            if (worker.TryEnqueue(_metricsLogger.BaseUri, data, lines, compress, captureResponse)) continue;
+
+            _sendBuffer.AddDropped(lines);
+            break;
+        }
+    }
+
+    private MetricsUploadWorker EnsureWorker() => _worker ??= new MetricsUploadWorker(RequestTimeoutSeconds);
+
+    private void DrainFailures()
+    {
+        var networkFailures = _worker.TakeNetworkFailures(out var networkError);
+        if (networkFailures > 0)
+        {
+            ReportNetworkFailures(networkFailures, networkError);
+        }
+
+        var httpFailures = _worker.TakeHttpFailures(out var httpError, out var responseBody);
+        if (httpFailures > 0)
+        {
+            ReportHttpFailures(httpFailures, httpError, responseBody);
+        }
+    }
+
+    private void ReportNetworkFailures(int failures, string error)
+    {
+        if (_throttleNetworkErrorMessages)
+        {
+            _accumulatedNetworkErrors += (uint)failures;
+            return;
+        }
+
+        Debug.LogError($"Consecutive network failures occurred while submitting a batch of metrics: {error}");
+        InvokeHandler.Invoke(this, _notifySubsequentNetworkFailuresAction, 5);
+        _throttleNetworkErrorMessages = true;
+        _accumulatedNetworkErrors += (uint)(failures - 1);
+    }
+
+    private void ReportHttpFailures(int failures, string error, string responseBody)
+    {
+        if (_throttleHttpErrorMessages)
+        {
+            _accumulatedHttpErrors += (uint)failures;
+            return;
+        }
+
+        Debug.LogError($"A HTTP error occurred while submitting batch of metrics: {error}");
+        if (responseBody != null) Debug.LogError(responseBody);
+        InvokeHandler.Invoke(this, _notifySubsequentHttpFailuresAction, 5);
+        _throttleHttpErrorMessages = true;
+        _accumulatedHttpErrors += (uint)(failures - 1);
     }
 
     void NotifySubsequentNetworkFailures()
@@ -181,9 +190,18 @@ internal class ReportUploader : MonoBehaviour
         Stop();
     }
 
+    private void DisposeWorker()
+    {
+        var worker = _worker;
+        _worker = null;
+        worker?.Dispose();
+    }
+
     public void Stop()
     {
         _isRunning = false;
-        StopAllCoroutines();
+
+        _worker?.DropQueued();
+        DisposeWorker();
     }
 }

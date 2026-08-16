@@ -4,9 +4,10 @@
         <AssemblyName>RustServerMetrics</AssemblyName>
         <ProjectGuid>{3C3A47A5-709A-42BB-B2BF-DB1FA0FEE316}</ProjectGuid>
         <TargetFramework>net48</TargetFramework>
-        <LangVersion>14</LangVersion>
+        <LangVersion>13</LangVersion>
         <OutputType>Library</OutputType>
         <Nullable>disable</Nullable>
+        <MSBuildWarningsAsMessages>MSB3277</MSBuildWarningsAsMessages>
     </PropertyGroup>
 
     <PropertyGroup Condition="'$(Configuration)' == 'Release'">
@@ -19,7 +20,7 @@
         <ErrorReport>prompt</ErrorReport>
         <Platforms>AnyCPU</Platforms>
     </PropertyGroup>
-    
+
     <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
         <OutputPath>bin\Debug\</OutputPath>
         <DefineConstants>TRACE;DEBUG</DefineConstants>
@@ -30,7 +31,7 @@
         <ErrorReport>prompt</ErrorReport>
         <Platforms>AnyCPU</Platforms>
     </PropertyGroup>
-	
+
     <!-- make all references non-private, so they won't be copied to the output folder -->
     <Target Name="ClearReferenceCopyLocalPaths" AfterTargets="ResolveAssemblyReferences">
         <ItemGroup>
@@ -105,7 +106,6 @@
         <Reference Include="UnityEngine.PerformanceReportingModule"/>
         <Reference Include="UnityEngine.Physics2DModule"/>
         <Reference Include="UnityEngine.PhysicsModule"/>
-        <Reference Include="UnityEngine.ProfilerModule"/>
         <Reference Include="UnityEngine.ScreenCaptureModule"/>
         <Reference Include="UnityEngine.SharedInternalsModule"/>
         <Reference Include="UnityEngine.SpriteMaskModule"/>
@@ -124,7 +124,6 @@
         <Reference Include="UnityEngine.UmbraModule"/>
         <Reference Include="UnityEngine.UnityAnalyticsModule"/>
         <Reference Include="UnityEngine.UnityConnectModule"/>
-        <Reference Include="UnityEngine.UnityTestProtocolModule"/>
         <Reference Include="UnityEngine.UnityWebRequestAssetBundleModule"/>
         <Reference Include="UnityEngine.UnityWebRequestAudioModule"/>
         <Reference Include="UnityEngine.UnityWebRequestModule"/>

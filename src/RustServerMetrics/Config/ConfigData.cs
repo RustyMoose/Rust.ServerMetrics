@@ -19,7 +19,7 @@ class ConfigData
     #endregion
 
     [JsonProperty(PropertyName = "Enabled")]
-    public bool Enabled;
+    public bool Enabled = false;
 
     [JsonProperty(PropertyName = "Influx Database Url")]
     public string DatabaseUrl = DefaultInfluxDbUrl;
@@ -37,11 +37,14 @@ class ConfigData
     public string ServerTag = DefaultServerTag;
 
     [JsonProperty(PropertyName = "Debug Logging")]
-    public bool DebugLogging;
+    public bool DebugLogging = false;
 
     [JsonProperty(PropertyName = "Amount of metrics to submit in each request")]
     public ushort BatchSize = 1000;
 
     [JsonProperty(PropertyName = "Gather Player Averages (Client FPS, Client Latency, Player FPS, Player Memory, Player Latency, Player Packet Loss)")]
     public bool GatherPlayerMetrics = true;
+
+    [JsonProperty(PropertyName = "Compress submitted metrics with gzip")]
+    public bool CompressRequests = true;
 }

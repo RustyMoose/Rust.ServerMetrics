@@ -40,7 +40,7 @@ public class RustServerMetricsLoader : IHarmonyModHooks
 
         if (MetricsLogger.Instance != null)
         {
-            Object.DestroyImmediate(MetricsLogger.Instance);
+            Object.DestroyImmediate(MetricsLogger.Instance.gameObject);
         }
     }
 
